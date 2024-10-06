@@ -1,25 +1,9 @@
-import netrc
-import os
-from functools import lru_cache
 from textwrap import dedent
 
 import anthropic
-from anthropic.types import MessageParam, ToolParam
-from pydantic import BaseModel, Field
-
-from claudesrc import models
+from claudesrc import anthropic_api_key, models
 from claudesrc.tool import Tool, to_api_block
-
-
-@lru_cache
-def anthropic_api_key() -> str:
-    if "ANTHROPIC_API_KEY" in os.environ:
-        return os.environ["ANTHROPIC_API_KEY"]
-
-    creds = netrc.netrc().authenticators("api.anthropic.com")
-    if creds is None:
-        raise ValueError("No credentials found for api.anthropic.com")
-    return creds[-1]
+from pydantic import BaseModel, Field
 
 
 class TestTool(Tool):
