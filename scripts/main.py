@@ -17,6 +17,7 @@ from anthropic.types import (
     ToolUseBlock,
 )
 from claudesrc import anthropic_api_key, models
+from claudesrc.conversation import Conversation
 from claudesrc.tool import Tool, to_api_block
 from pydantic import BaseModel, Field, TypeAdapter
 
@@ -239,13 +240,9 @@ def main():
     repo_name = "The Linux Kernel"
     root = Path("~/code/linux/").expanduser()
 
-    tools: dict[str, Tool] = {
-        tool.name: tool
-        for tool in [ListFiles(root), ReadFiles(root), SearchFiles(root)]
-    }
+    tools: list[Tool] = [ListFiles(root), ReadFiles(root), SearchFiles(root)]
 
     client = anthropic.Client(api_key=anthropic_api_key())
-    content_adapter = TypeAdapter(list[ContentBlock])
 
     SYSTEM_PROMPT = dedent("""\
     You are an agent who helps experienced software engineers
@@ -273,69 +270,25 @@ def main():
     ]
 
     transcript = Path("transcript.json")
+
+    convo = Conversation(
+        client=client,
+        model=models.SONNET_3_5,
+        system=system,
+        max_tokens=1024,
+        tools=tools,
+    )
+
     if transcript.exists():
         with transcript.open("r") as fh:
             messages = json.load(fh)
-    else:
-        messages = [
-            MessageParam(
-                role="user",
-                content=dedent("""\
-            Can you help me understand how to implement DMA for a PCI device?
-            """),
-            ),
-        ]
+        convo.turns = messages
 
-    tool_options = [to_api_block(tool) for tool in tools.values()]
+    reply = convo.user_prompt("What is the VFS?")
+    print(reply)
 
-    keep_going = True
-    while keep_going:
-        message = client.messages.create(
-            model=models.SONNET_3_5,
-            system=system,
-            max_tokens=1024,
-            tools=tool_options,
-            messages=messages,
-        )
-
-        messages.append(
-            MessageParam(
-                role=message.role,
-                content=content_adapter.dump_python(message.content),
-            )
-        )
-
-        keep_going = False
-
-        print(message.content)
-        last = message.content[-1]
-        if isinstance(last, ToolUseBlock):
-            tool = tools[last.name]
-            response = tool.call_tool(last.input)
-            messages.append(
-                MessageParam(
-                    role="user",
-                    content=[
-                        ToolResultBlockParam(
-                            tool_use_id=last.id,
-                            type="tool_result",
-                            content=response,
-                            is_error=False,
-                        )
-                    ],
-                )
-            )
-            print(f"=== tool use result ===")
-            print(response)
-
-            keep_going = True
-        with open(transcript, "w") as fh:
-            json.dump(messages, fh)
-
-        if keep_going:
-            print()
-            print("Continue? ")
-            input()
+    with open(transcript, "w") as fh:
+        json.dump(convo.turns, fh)
 
 
 if __name__ == "__main__":
