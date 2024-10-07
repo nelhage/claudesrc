@@ -1,7 +1,8 @@
 from abc import abstractmethod
 from typing import Protocol
 
-from anthropic.types import ImageBlockParam, TextBlock, ToolParam
+from anthropic.types import ToolParam
+from anthropic.types.tool_result_block_param import Content
 
 
 class Tool(Protocol):
@@ -10,7 +11,7 @@ class Tool(Protocol):
     input_schema: dict
 
     @abstractmethod
-    def call_tool(self, args) -> str | list[TextBlock | ImageBlockParam]: ...
+    def call_tool(self, args) -> str | list[Content]: ...
 
 
 def to_api_block(tool: Tool) -> ToolParam:

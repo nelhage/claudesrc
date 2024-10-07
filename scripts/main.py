@@ -1,14 +1,24 @@
 import html
 import io
+import json
+import subprocess
 from functools import partial
 from pathlib import Path
 from textwrap import dedent
 
 import anthropic
-from anthropic.types import MessageParam, ToolParam
+from anthropic.types import (
+    ContentBlock,
+    Message,
+    MessageParam,
+    TextBlockParam,
+    ToolParam,
+    ToolResultBlockParam,
+    ToolUseBlock,
+)
 from claudesrc import anthropic_api_key, models
 from claudesrc.tool import Tool, to_api_block
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 
 # class Project:
 #     respositories: dict[str, Path]
@@ -108,6 +118,70 @@ class ReadFiles(Tool):
         return out.getvalue()
 
 
+class SearchFiles(Tool):
+    def __init__(self, root: Path):
+        self.root = root
+
+    class Params(BaseModel):
+        pattern: str = Field(
+            description="A regular expression to search for. Uses Perl-style regex syntax but without support for backreferences."
+        )
+        path: str | None = Field(
+            description="Only search files under a given directory",
+            default=None,
+        )
+        glob: list[str] | None = Field(
+            description="Only search files whose names match any of the given glob patterns (e.g. '*.h')",
+            default=None,
+        )
+
+    MAX_RESULTS = 1000
+
+    name = "search_files"
+    description = dedent(f"""\
+    Search for files matching a regular expression.
+
+    You will receive a list of files which match the provided regular
+    expression, including the contents of the matching line(s).
+
+    You may limit your search to a given subtree or to files matching
+    a given pattern.
+
+    If your search returns more than {MAX_RESULTS} lines, the result
+    will be truncated.
+    """)
+
+    input_schema = Params.model_json_schema()
+
+    def call_tool(self, raw: dict) -> str:
+        args = self.Params.model_validate(raw)
+
+        cmd = [
+            "rg",
+            "-e",
+            args.pattern,
+            "-n",
+            "-M",
+            "200",
+            "--max-columns-preview",
+            "-H",
+            "--no-heading",
+        ]
+        if args.glob:
+            for pat in args.glob:
+                cmd.extend(["-g", pat])
+        if args.path:
+            cmd.append(args.path)
+
+        out = subprocess.check_output(cmd, cwd=self.root, text=True)
+        nmatch = out.count("\n")
+        if nmatch > self.MAX_RESULTS:
+            out = "\n".join(out.split("\n")[: self.MAX_RESULTS])
+            out += f"\n** OUTPUT TRUNCATED: {nmatch-self.MAX_RESULTS} matches hidden\n"
+
+        return out
+
+
 def test_list():
     lst = ListFiles(root=Path("~/code/linux/").expanduser())
 
@@ -136,9 +210,132 @@ def test_read_file():
         print()
 
 
-def main():
+def test_search():
+    cmd = SearchFiles(root=Path("~/code/linux/").expanduser())
+
+    for args in [
+        SearchFiles.Params(
+            pattern="printk",
+        ),
+        SearchFiles.Params(
+            pattern="dma_alloc_coherent",
+            path="Documentation",
+            glob=["*.txt"],
+        ),
+    ]:
+        print(f"SEARCH {args=}")
+        result = cmd.call_tool(args.model_dump())
+        print(result)
+        print()
+
+
+def selftest():
     test_list()
     test_read_file()
+    test_search()
+
+
+def main():
+    repo_name = "The Linux Kernel"
+    root = Path("~/code/linux/").expanduser()
+
+    tools: dict[str, Tool] = {
+        tool.name: tool
+        for tool in [ListFiles(root), ReadFiles(root), SearchFiles(root)]
+    }
+
+    client = anthropic.Client(api_key=anthropic_api_key())
+    content_adapter = TypeAdapter(list[ContentBlock])
+
+    SYSTEM_PROMPT = dedent("""\
+    You are an agent who helps experienced software engineers
+    understand and learn about large and complex codebases. You have
+    access to a git checkout of a source code repository, and tools
+    for exploring it. Your job is to answer the user's questions based
+    on reference to the source.
+
+    You will mention specific source files and functions in your
+    answers, where appropriate. You will answer questions at a high-
+    level conceptual and architectural level by default, but be
+    willing to explain specific implementation details with reference
+    to the source when useful.
+
+    In general you work in repositories too large for a human to read
+    or to fit in your context window; you will need to use search
+    tools to discover and read the relevant files.
+    """)
+
+    system = [
+        TextBlockParam(type="text", text=SYSTEM_PROMPT),
+        TextBlockParam(
+            type="text", text=f"Today, you are working in {repo_name} ({root.name}.git)"
+        ),
+    ]
+
+    transcript = Path("transcript.json")
+    if transcript.exists():
+        with transcript.open("r") as fh:
+            messages = json.load(fh)
+    else:
+        messages = [
+            MessageParam(
+                role="user",
+                content=dedent("""\
+            Can you help me understand how to implement DMA for a PCI device?
+            """),
+            ),
+        ]
+
+    tool_options = [to_api_block(tool) for tool in tools.values()]
+
+    keep_going = True
+    while keep_going:
+        message = client.messages.create(
+            model=models.SONNET_3_5,
+            system=system,
+            max_tokens=1024,
+            tools=tool_options,
+            messages=messages,
+        )
+
+        messages.append(
+            MessageParam(
+                role=message.role,
+                content=content_adapter.dump_python(message.content),
+            )
+        )
+
+        keep_going = False
+
+        print(message.content)
+        last = message.content[-1]
+        if isinstance(last, ToolUseBlock):
+            tool = tools[last.name]
+            response = tool.call_tool(last.input)
+            messages.append(
+                MessageParam(
+                    role="user",
+                    content=[
+                        ToolResultBlockParam(
+                            tool_use_id=last.id,
+                            type="tool_result",
+                            content=response,
+                            is_error=False,
+                        )
+                    ],
+                )
+            )
+            print(f"=== tool use result ===")
+            print(response)
+
+            keep_going = True
+        with open(transcript, "w") as fh:
+            json.dump(messages, fh)
+
+        if keep_going:
+            print()
+            print("Continue? ")
+            input()
 
 
 if __name__ == "__main__":
