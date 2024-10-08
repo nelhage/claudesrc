@@ -174,13 +174,20 @@ class SearchFiles(Tool):
         if args.path:
             cmd.append(args.path)
 
-        out = subprocess.check_output(cmd, cwd=self.root, text=True)
-        nmatch = out.count("\n")
-        if nmatch > self.MAX_RESULTS:
-            out = "\n".join(out.split("\n")[: self.MAX_RESULTS])
-            out += f"\n** OUTPUT TRUNCATED: {nmatch-self.MAX_RESULTS} matches hidden\n"
-
-        return out
+        try:
+            out = subprocess.check_output(cmd, cwd=self.root, text=True)
+            nmatch = out.count("\n")
+            if nmatch > self.MAX_RESULTS:
+                out = "\n".join(out.split("\n")[: self.MAX_RESULTS])
+                out += (
+                    f"\n** OUTPUT TRUNCATED: {nmatch-self.MAX_RESULTS} matches hidden\n"
+                )
+            return out
+        except subprocess.CalledProcessError as exc:
+            if exc.returncode == 1:
+                return "<no matches>"
+            else:
+                raise exc
 
 
 def test_list():
@@ -217,6 +224,9 @@ def test_search():
     for args in [
         SearchFiles.Params(
             pattern="printk",
+        ),
+        SearchFiles.Params(
+            pattern="no such rhino",
         ),
         SearchFiles.Params(
             pattern="dma_alloc_coherent",
