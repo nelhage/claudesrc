@@ -1,7 +1,9 @@
 import html
 import io
 import json
+import os
 import subprocess
+import tempfile
 from functools import partial
 from pathlib import Path
 from textwrap import dedent
@@ -15,6 +17,7 @@ from anthropic.types import (
     ToolParam,
     ToolResultBlockParam,
     ToolUseBlock,
+    ToolUseBlockParam,
 )
 from claudesrc import anthropic_api_key, models
 from claudesrc.conversation import Conversation
@@ -246,6 +249,63 @@ def selftest():
     test_search()
 
 
+USER_SEPARATOR = "# Respond below this line. Delete this header to exit\n"
+
+
+def render_turn(fh, turn: MessageParam):
+    lines = []
+    header = f"# {turn['role'].title()}"
+    has_content = False
+
+    if isinstance(turn["content"], str):
+        has_content = True
+        lines.append(turn["content"])
+    else:
+        for block in turn["content"]:
+            assert isinstance(block, dict)
+            match block["type"]:
+                case "text":
+                    lines.append(block["text"])
+                    has_content = True
+                case "tool_use":
+                    lines.append(f"# tool_use tool={block['name']}: {block['input']}")
+                case "tool_result":
+                    if "content" in block:
+                        nlines = block["content"].count("\n")
+                    else:
+                        nlines = 0
+                    lines.append(
+                        f"# tool_result lines={nlines} error={block.get('is_error', False)}"
+                    )
+                case _:
+                    raise AssertionError(f"Unknown block: {block!r}")
+
+    if has_content:
+        lines.insert(0, header)
+
+    for line in lines:
+        print(line, file=fh)
+
+
+def read_user_turn(tmpdir: Path, convo: Conversation) -> str | None:
+    with (tmpdir / "transcript.json").open("w") as fh:
+        json.dump(convo.turns, fh)
+
+    md_path = tmpdir / "claude.md"
+
+    with md_path.open("w") as fh:
+        for turn in convo.turns:
+            render_turn(fh, turn)
+        print(USER_SEPARATOR, file=fh)
+
+    subprocess.check_call([os.getenv("EDITOR", "vi"), md_path])
+    reply = md_path.read_text()
+    bits = reply.split(USER_SEPARATOR, 2)
+    if len(bits) == 1:
+        return None
+    return bits[1]
+
+
 def main():
     repo_name = "The Linux Kernel"
     root = Path("~/code/linux/").expanduser()
@@ -279,8 +339,6 @@ def main():
         ),
     ]
 
-    transcript = Path("transcript.json")
-
     convo = Conversation(
         client=client,
         model=models.SONNET_3_5,
@@ -289,16 +347,14 @@ def main():
         tools=tools,
     )
 
-    if transcript.exists():
-        with transcript.open("r") as fh:
-            messages = json.load(fh)
-        convo.turns = messages
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        while True:
+            user_turn = read_user_turn(td, convo)
+            if not user_turn:
+                break
 
-    reply = convo.user_prompt("What is the VFS?")
-    print(reply)
-
-    with open(transcript, "w") as fh:
-        json.dump(convo.turns, fh)
+            _ = convo.user_prompt(user_turn)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@ import anthropic
 from anthropic.types import (
     ContentBlock,
     MessageParam,
-    ModelParam,
     ToolResultBlockParam,
     ToolUseBlock,
 )
@@ -31,7 +30,7 @@ class Conversation:
         )
         self.create_kwargs.setdefault("max_tokens", DEFAULT_MAX_TOKENS)
         self.tools = {t.name: t for t in tools}
-        self.turns = []
+        self.turns: list[MessageParam] = []
 
     def user_prompt(self, prompt):
         self.turns.append(
@@ -55,6 +54,7 @@ class Conversation:
 
             last = message.content[-1]
             if isinstance(last, ToolUseBlock):
+                print(f"Tool use: {last.name}: {last.input}")
                 tool = self.tools[last.name]
                 response = tool.call_tool(last.input)
                 self.turns.append(
