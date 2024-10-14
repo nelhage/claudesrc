@@ -10,19 +10,13 @@ from textwrap import dedent
 
 import anthropic
 from anthropic.types import (
-    ContentBlock,
-    Message,
     MessageParam,
     TextBlockParam,
-    ToolParam,
-    ToolResultBlockParam,
-    ToolUseBlock,
-    ToolUseBlockParam,
 )
 from claudesrc import anthropic_api_key, models
 from claudesrc.conversation import Conversation
-from claudesrc.tool import Tool, to_api_block
-from pydantic import BaseModel, Field, TypeAdapter
+from claudesrc.tool import Tool
+from pydantic import BaseModel, Field
 
 # class Project:
 #     respositories: dict[str, Path]
@@ -66,7 +60,7 @@ class ListFiles(Tool):
                 continue
 
             write(f"Directory listing: {rel}/")
-            write(f"BYTES\tLINES\tNAME")
+            write("BYTES\tLINES\tNAME")
 
             for ent in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name)):
                 if ent.is_dir():
@@ -117,7 +111,7 @@ class ReadFiles(Tool):
             out.write(body)
             if not body.endswith("\n"):
                 write()
-            write(f"</file-contents>")
+            write("</file-contents>")
 
         return out.getvalue()
 
