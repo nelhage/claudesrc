@@ -4,17 +4,17 @@ import json
 import os
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from textwrap import dedent
 
 import anthropic
 from anthropic.types import (
-    MessageParam,
     TextBlockParam,
 )
 from claudesrc import anthropic_api_key, models
-from claudesrc.conversation import Conversation
+from claudesrc.conversation import Conversation, MessageTurn
 from claudesrc.tool import Tool
 from pydantic import BaseModel, Field
 
@@ -246,16 +246,16 @@ def selftest():
 USER_SEPARATOR = "# Respond below this line. Delete this header to exit\n"
 
 
-def render_turn(fh, turn: MessageParam):
+def render_turn(fh, turn: MessageTurn):
     lines = []
-    header = f"# {turn['role'].title()}"
+    header = f"# {turn.role.title()}"
     has_content = False
 
-    if isinstance(turn["content"], str):
+    if isinstance(turn.content, str):
         has_content = True
-        lines.append(turn["content"])
+        lines.append(turn.content)
     else:
-        for block in turn["content"]:
+        for block in turn.content:
             assert isinstance(block, dict)
             match block["type"]:
                 case "text":
@@ -279,11 +279,12 @@ def render_turn(fh, turn: MessageParam):
 
     for line in lines:
         print(line, file=fh)
+        print(file=fh)
 
 
 def read_user_turn(tmpdir: Path, convo: Conversation) -> str | None:
-    with (tmpdir / "transcript.json").open("w") as fh:
-        json.dump(convo.turns, fh)
+    # with (tmpdir / "transcript.json").open("w") as fh:
+    #    json.dump(convo.turns, fh)
 
     md_path = tmpdir / "claude.md"
 
@@ -300,13 +301,25 @@ def read_user_turn(tmpdir: Path, convo: Conversation) -> str | None:
     return bits[1]
 
 
-def main():
+def tools_for(repo: Path) -> list[Tool]:
+    return [ListFiles(repo), ReadFiles(repo), SearchFiles(repo)]
+
+
+MAX_TOKENS = 1024
+
+
+class SerializedConversation(BaseModel):
+    repository: str
+    repo_name: str
+    tools: list[str] = Field(default_factory=list)
+    model: str = models.SONNET_3_5
+    system_prompt: str | list[TextBlockParam] | None = ""
+    turns: list[MessageTurn] = Field(default_factory=list)
+
+
+def begin_conversation() -> SerializedConversation:
     repo_name = "The Linux Kernel"
     root = Path("~/code/linux/").expanduser()
-
-    tools: list[Tool] = [ListFiles(root), ReadFiles(root), SearchFiles(root)]
-
-    client = anthropic.Client(api_key=anthropic_api_key())
 
     SYSTEM_PROMPT = dedent("""\
     You are an agent who helps experienced software engineers
@@ -333,22 +346,85 @@ def main():
         ),
     ]
 
+    return SerializedConversation(
+        repository=str(root),
+        repo_name=repo_name,
+        system_prompt=system,
+        tools=[t.name for t in tools_for(root)],
+        model=models.SONNET_3_5,
+    )
+
+
+def build_conversation(
+    client: anthropic.Client, state: SerializedConversation
+) -> Conversation:
+    repo = Path(state.repository)
+
     convo = Conversation(
         client=client,
-        model=models.SONNET_3_5,
-        system=system,
-        max_tokens=1024,
-        tools=tools,
+        model=state.model,
+        system=state.system_prompt,
+        max_tokens=MAX_TOKENS,
+        tools=tools_for(repo),
     )
+    convo.turns = list(state.turns)
+    return convo
+
+
+@contextmanager
+def breakpoint_on_exception():
+    import pdb
+    import sys
+
+    try:
+        yield
+    except Exception as ex:
+        pdb.post_mortem(ex.__traceback__)
+
+        raise
+
+
+@breakpoint_on_exception()
+def main():
+    client = anthropic.Client(api_key=anthropic_api_key())
+
+    save_path = Path("conversation.json")
+    if save_path.exists():
+        with save_path.open() as fh:
+            state = SerializedConversation.model_validate(json.load(fh))
+    else:
+        state = begin_conversation()
+
+    conversation = build_conversation(client, state)
 
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         while True:
-            user_turn = read_user_turn(td, convo)
+            for turn in conversation.pump():
+                state.turns.append(turn)
+                save_path.write_text(state.model_dump_json())
+
+                for block in turn.content:
+                    if not isinstance(block, dict):
+                        continue
+
+                    if block["type"] == "tool_use":
+                        print(f"Use tool: {block['name']}: {block['input']}")
+                    elif block["type"] == "tool_result":
+                        content = block["content"]
+                        if isinstance(content, str):
+                            content = [dict(type="text", text=content)]
+                        lines = sum(
+                            block["text"].count("\n")
+                            for block in content
+                            if "text" in block
+                        )
+                        print(f"Tool done: <returned {lines} lines>")
+
+            user_turn = read_user_turn(td, conversation)
             if not user_turn:
                 break
-
-            _ = convo.user_prompt(user_turn)
+            conversation.append_user(user_turn)
 
 
 if __name__ == "__main__":
