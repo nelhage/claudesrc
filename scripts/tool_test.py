@@ -1,8 +1,8 @@
 from textwrap import dedent
 
 import anthropic
-from claudesrc import anthropic_api_key, models
-from claudesrc.tool import Tool, to_api_block
+from scrubs import anthropic_api_key, models
+from scrubs.tool import Tool, to_api_block
 from pydantic import BaseModel, Field
 
 

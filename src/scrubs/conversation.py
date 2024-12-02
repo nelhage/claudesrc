@@ -11,8 +11,8 @@ from anthropic.types import (
 )
 from pydantic import BaseModel, TypeAdapter
 
-from claudesrc import tool
-from claudesrc.tool import to_api_block
+from scrubs import tool
+from scrubs.tool import to_api_block
 
 DEFAULT_MAX_TOKENS = 1024
 

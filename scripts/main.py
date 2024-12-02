@@ -13,9 +13,9 @@ import anthropic
 from anthropic.types import (
     TextBlockParam,
 )
-from claudesrc import anthropic_api_key, models
-from claudesrc.conversation import Conversation, MessageTurn
-from claudesrc.tool import Tool
+from scrubs import anthropic_api_key, models
+from scrubs.conversation import Conversation, MessageTurn
+from scrubs.tool import Tool
 from pydantic import BaseModel, Field
 
 # class Project:
