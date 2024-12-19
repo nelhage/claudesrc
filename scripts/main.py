@@ -12,6 +12,7 @@ from textwrap import dedent
 
 import anthropic
 from anthropic.types import (
+    MessageParam,
     TextBlockParam,
 )
 from pydantic import BaseModel, Field
@@ -258,16 +259,16 @@ def selftest():
 USER_SEPARATOR = "# Respond below this line. Delete this header to exit\n"
 
 
-def render_turn(fh, turn: MessageTurn):
+def render_turn(fh, turn: MessageParam):
     lines = []
-    header = f"# {turn.role.title()}"
+    header = f"# {turn['role'].title()}"
     has_content = False
 
-    if isinstance(turn.content, str):
+    if isinstance(turn["content"], str):
         has_content = True
-        lines.append(turn.content)
+        lines.append(turn["content"])
     else:
-        for block in turn.content:
+        for block in turn["content"]:
             assert isinstance(block, dict)
             match block["type"]:
                 case "text":
@@ -276,10 +277,11 @@ def render_turn(fh, turn: MessageTurn):
                 case "tool_use":
                     lines.append(f"# tool_use tool={block['name']}: {block['input']}")
                 case "tool_result":
-                    if "content" in block:
-                        nlines = block["content"].count("\n")
-                    else:
-                        nlines = 0
+                    content = block.get("content", "")
+                    if isinstance(content, str):
+                        content = [dict(type="text", text=content)]
+                    nlines = sum(c.get("text", "").count("\n") for c in content)
+
                     lines.append(
                         f"# tool_result lines={nlines} error={block.get('is_error', False)}"
                     )
