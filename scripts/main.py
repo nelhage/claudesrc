@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import tempfile
+import traceback
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
@@ -13,10 +14,12 @@ import anthropic
 from anthropic.types import (
     TextBlockParam,
 )
-from scrubs import anthropic_api_key, models
-from scrubs.conversation import Conversation, MessageTurn
-from scrubs.tool import Tool
 from pydantic import BaseModel, Field
+from scrubs import anthropic_api_key, models
+from scrubs.cache import Cache
+from scrubs.conversation import Conversation, MessageTurn
+from scrubs.store import Store
+from scrubs.tool import Tool
 
 # class Project:
 #     respositories: dict[str, Path]
@@ -25,6 +28,9 @@ from pydantic import BaseModel, Field
 class ListFiles(Tool):
     def __init__(self, root: Path):
         self.root = root
+
+    def cache_params(self) -> dict:
+        return dict(root=self.root)
 
     class Params(BaseModel):
         path: str | list[str] = Field(
@@ -77,6 +83,9 @@ class ReadFiles(Tool):
     def __init__(self, root: Path):
         self.root = root
 
+    def cache_params(self) -> dict:
+        return dict(root=self.root)
+
     class Params(BaseModel):
         path: str | list[str] = Field(description="The files you want to read")
 
@@ -119,6 +128,9 @@ class ReadFiles(Tool):
 class SearchFiles(Tool):
     def __init__(self, root: Path):
         self.root = root
+
+    def cache_params(self) -> dict:
+        return dict(root=self.root)
 
     class Params(BaseModel):
         pattern: str = Field(
@@ -305,19 +317,7 @@ def tools_for(repo: Path) -> list[Tool]:
     return [ListFiles(repo), ReadFiles(repo), SearchFiles(repo)]
 
 
-MAX_TOKENS = 1024
-
-
-class SerializedConversation(BaseModel):
-    repository: str
-    repo_name: str
-    tools: list[str] = Field(default_factory=list)
-    model: str = models.SONNET_3_5
-    system_prompt: str | list[TextBlockParam] | None = ""
-    turns: list[MessageTurn] = Field(default_factory=list)
-
-
-def begin_conversation() -> SerializedConversation:
+def begin_conversation(cache: Cache, client: anthropic.Client) -> Conversation:
     repo_name = "The Linux Kernel"
     root = Path("~/code/linux/").expanduser()
 
@@ -340,34 +340,17 @@ def begin_conversation() -> SerializedConversation:
     """)
 
     system = [
-        TextBlockParam(type="text", text=SYSTEM_PROMPT),
-        TextBlockParam(
-            type="text", text=f"Today, you are working in {repo_name} ({root.name}.git)"
-        ),
+        SYSTEM_PROMPT,
+        f"Today, you are working in {repo_name} ({root.name}.git)",
     ]
 
-    return SerializedConversation(
-        repository=str(root),
-        repo_name=repo_name,
-        system_prompt=system,
-        tools=[t.name for t in tools_for(root)],
-        model=models.SONNET_3_5,
-    )
-
-
-def build_conversation(
-    client: anthropic.Client, state: SerializedConversation
-) -> Conversation:
-    repo = Path(state.repository)
-
     convo = Conversation(
+        cache=cache,
         client=client,
-        model=state.model,
-        system=state.system_prompt,
-        max_tokens=MAX_TOKENS,
-        tools=tools_for(repo),
+        model=models.SONNET_3_5,
+        system_prompt=system,
+        tools=tools_for(root),
     )
-    convo.turns = list(state.turns)
     return convo
 
 
@@ -379,47 +362,62 @@ def breakpoint_on_exception():
     try:
         yield
     except Exception as ex:
+        traceback.print_exception(ex)
+
         pdb.post_mortem(ex.__traceback__)
 
         raise
+
+
+CACHE_DIR = Path("~/.cache/scrubs").expanduser()
 
 
 @breakpoint_on_exception()
 def main():
     client = anthropic.Client(api_key=anthropic_api_key())
 
-    save_path = Path("conversation.json")
-    if save_path.exists():
-        with save_path.open() as fh:
-            state = SerializedConversation.model_validate(json.load(fh))
-    else:
-        state = begin_conversation()
+    CACHE_DIR.mkdir(exist_ok=True, parents=True)
 
-    conversation = build_conversation(client, state)
+    store = Store(str(CACHE_DIR / "cache.sqlite"))
+    cache = Cache(store)
+
+    conversation = begin_conversation(cache, client)
+
+    query = """\
+What is a Maple tree? Where is the data structure defined?
+"""
+
+    conversation.user_prompt(query)
 
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         while True:
             for turn in conversation.pump():
-                state.turns.append(turn)
-                save_path.write_text(state.model_dump_json())
+                if isinstance(turn.content, dict):
+                    type = turn.content.get("type", "<dict>")
+                else:
+                    type = "str"
 
-                for block in turn.content:
-                    if not isinstance(block, dict):
-                        continue
+                print(
+                    f"Turn role={turn.role} type={type}: prompt={conversation.prompt}"
+                )
 
-                    if block["type"] == "tool_use":
-                        print(f"Use tool: {block['name']}: {block['input']}")
-                    elif block["type"] == "tool_result":
-                        content = block["content"]
-                        if isinstance(content, str):
-                            content = [dict(type="text", text=content)]
-                        lines = sum(
-                            block["text"].count("\n")
-                            for block in content
-                            if "text" in block
-                        )
-                        print(f"Tool done: <returned {lines} lines>")
+                block = turn.content
+                if not isinstance(block, dict):
+                    continue
+
+                if block["type"] == "tool_use":
+                    print(f"Use tool: {block['name']}: {block['input']}")
+                elif block["type"] == "tool_result":
+                    content = block["content"]
+                    if isinstance(content, str):
+                        content = [dict(type="text", text=content)]
+                    lines = sum(
+                        block["text"].count("\n")
+                        for block in content
+                        if "text" in block
+                    )
+                    print(f"Tool done: <returned {lines} lines>")
 
             user_turn = read_user_turn(td, conversation)
             if not user_turn:

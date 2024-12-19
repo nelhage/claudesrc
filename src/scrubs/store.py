@@ -19,11 +19,18 @@ class RawObject:
 
 COMPACT_SEPARATORS = (",", ":")
 
+
+def compact_dumps(obj) -> str:
+    return json.dumps(obj, separators=COMPACT_SEPARATORS)
+
+
 ObjectID = str
 
 
 class Store:
     def configure_db(self):
+        # self.db.autocommit = True
+
         # https://kerkour.com/sqlite-for-servers
         self.db.executescript("""
         PRAGMA journal_mode = wal2;
@@ -49,6 +56,7 @@ class Store:
                 PRIMARY KEY (operation)
         )
         """)
+        self.db.commit()
 
     def __init__(self, path: str):
         self.path = path
@@ -58,7 +66,7 @@ class Store:
 
     # Objects
     def insert(self, type: str, obj: str) -> ObjectID:
-        rt = json.dumps(json.loads(obj), separators=COMPACT_SEPARATORS)
+        rt = compact_dumps(json.loads(obj))
         assert rt == obj, f"Object must round-trip: {rt!r} != {obj!r}"
 
         id = hashobj(obj)
@@ -66,6 +74,7 @@ class Store:
             "INSERT OR IGNORE INTO objects (id, type, object) VALUES (?, ?, ?)",
             (id, type, obj),
         )
+        self.db.commit()
         return id
 
     def get(self, id: ObjectID, type: str | None = None) -> RawObject | None:
@@ -92,9 +101,10 @@ class Store:
     # Cache: (operation, result)
     def put_cache(self, operation: ObjectID, result: ObjectID):
         self.db.execute(
-            "INSERT OR ABORT INTO caches (operation, result) VALUES (?, ?, ?)",
+            "INSERT OR ABORT INTO caches (operation, result) VALUES (?, ?)",
             (operation, result),
         )
+        self.db.commit()
 
     def has_cache(self, operation: ObjectID) -> bool:
         return (
@@ -111,6 +121,7 @@ class Store:
         ).fetchone()
         if row is None:
             return None
+        return row[0]
 
     def fetch_cache(self, operation: ObjectID) -> ObjectID:
         got = self.get_cache(operation)
