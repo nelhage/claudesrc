@@ -1,7 +1,8 @@
-from typing import Any, ClassVar, Literal, Type, get_args
+from typing import Any, ClassVar, Literal, Type, cast, get_args
 
 from anthropic.types import Usage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import Required, TypedDict
 
 from scrubs.store import ObjectID
 
@@ -25,9 +26,28 @@ class ToolObject(BaseModel):
     cache_params: Any = Field(default_factory=dict)
 
 
+class ContentDict(TypedDict):
+    __pydantic_config__ = ConfigDict(extra="allow")  # type: ignore
+
+    type: Required[str]
+
+
 class ContentObject(BaseModel):
     object_type: ClassVar[str] = "content"
-    content: str | dict[str, Any]
+
+    type: str
+    fields: dict[str, Any]
+
+    @classmethod
+    def from_api(cls, obj: str | ContentDict | dict[str, Any]) -> "ContentObject":
+        if isinstance(obj, str):
+            return cls(type="text", fields=dict(text=obj))
+        fields = dict(obj)
+        type = cast(str, fields.pop("type"))
+        return cls(type=type, fields=fields)
+
+    def to_dict(self) -> ContentDict:
+        return ContentDict(type=self.type, **self.fields)
 
 
 class MessageObject(BaseModel):

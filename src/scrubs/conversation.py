@@ -1,14 +1,14 @@
-from typing import Iterable, Literal
+from typing import Iterable, Literal, cast
 
 import anthropic
 from anthropic.types import (
-    ContentBlock,
     MessageParam,
     ModelParam,
     TextBlockParam,
     ToolResultBlockParam,
+    ToolUseBlockParam,
 )
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel
 
 from scrubs import tool
 from scrubs.types import ignore_type
@@ -16,6 +16,7 @@ from scrubs.types import ignore_type
 from .cache import Cache
 from .objects import (
     DEFAULT_MAX_TOKENS,
+    ContentDict,
     ContentObject,
     CreateMessageObject,
     MessageObject,
@@ -29,14 +30,12 @@ from .objects import (
 from .store import ObjectID
 from .tool import to_api_block
 
-CONTENT_ADAPTER = TypeAdapter(list[ContentBlock])
-
 RoleType = Literal["user", "assistant"]
 
 
 class MessageTurn(BaseModel):
     role: RoleType
-    content: str | dict
+    content: ContentDict
 
 
 def insert_tool(cache: Cache, tool: tool.Tool) -> ObjectID:
@@ -58,13 +57,13 @@ class Conversation:
         seed: int = 0,
         tools: list[tool.Tool] = [],
         model: ModelParam = "claude-3-5-sonnet-latest",
-        system_prompt: list[str] = [],
+        system_prompt: Iterable[str | TextBlockParam] = [],
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
         self.cache = cache
         self.client = client
-        self.system_prompt: tuple[TextBlockParam] = tuple(
-            TextBlockParam(type="text", text=p) for p in system_prompt
+        self.system_prompt: tuple[ContentObject] = tuple(
+            ContentObject.from_api(p) for p in system_prompt
         )
         self.seed = seed
         self.max_tokens = max_tokens
@@ -72,9 +71,7 @@ class Conversation:
         self.model = self.cache.insert(
             ModelOptsObject(
                 model=model,
-                system=[
-                    self.cache.insert(ContentObject(content=m)) for m in system_prompt
-                ],
+                system=[self.cache.insert(p) for p in self.system_prompt],
                 tools=[insert_tool(cache, t) for t in tools],
             )
         )
@@ -89,10 +86,10 @@ class Conversation:
 
         return self.pump(seed)
 
-    def append_user(self, prompt):
+    def append_user(self, prompt: str | TextBlockParam):
         self.append_turn(
             role="user",
-            content=self.cache.insert(ContentObject(content=prompt)),
+            content=self.cache.insert(ContentObject.from_api(prompt)),
         )
 
     def append_turn(self, role: RoleType, content: ObjectID) -> MessageTurn:
@@ -103,11 +100,8 @@ class Conversation:
             )
         )
 
-        block = self.cache.get_content(content).content
-        if isinstance(block, dict):
-            turn = MessageParam(role=role, content=[ignore_type(block)])
-        else:
-            turn = MessageParam(role=role, content=block)
+        block = self.cache.get_content(content).to_dict()
+        turn = MessageParam(role=role, content=[ignore_type(block)])
 
         self.turns.append(turn)
         return MessageTurn(role=role, content=block)
@@ -155,13 +149,13 @@ class Conversation:
         reply = self.client.messages.create(
             messages=self.turns,
             model=model.model,
-            system=self.system_prompt,
+            system=[ignore_type(p.to_dict()) for p in self.system_prompt],
             tools=[to_api_block(tool) for tool in self.tools.values()],
             max_tokens=create.max_tokens,
         )
 
         content = [
-            self.cache.insert(ContentObject(content=c.model_dump()))
+            self.cache.insert(ContentObject.from_api(c.model_dump()))
             for c in reply.content
         ]
 
@@ -182,13 +176,12 @@ class Conversation:
             return None
 
         last = self.cache.get_prompt(self.prompt).message
-        message = self.cache.get_content(last.content).content
-
-        if not isinstance(message, dict):
-            return None
+        message = self.cache.get_content(last.content).to_dict()
 
         if message["type"] != "tool_use":
             return
+
+        message = cast(ToolUseBlockParam, message)
 
         tool_id = insert_tool(self.cache, self.tools[message["name"]])
         assert tool_id in self.cache.get_model_opts(self.model).tools
@@ -196,7 +189,7 @@ class Conversation:
         tool_use = ToolUseObject(
             tool=tool_id,
             id=message["id"],
-            input=message["input"],
+            input=message["input"],  # type: ignore
         )
 
         tool_use_oid = self.cache.insert(tool_use)
@@ -208,11 +201,10 @@ class Conversation:
             tool = self.tools[self.cache.get_tool(tool_use.tool).name]
             result_content = tool.call_tool(tool_use.input)
             if not isinstance(result_content, list):
-                result_content = [dict(type="text", text=result_content)]
+                result_content = [result_content]
 
             content = [
-                self.cache.insert(ContentObject(content=ignore_type(c)))
-                for c in result_content
+                self.cache.insert(ContentObject.from_api(c)) for c in result_content
             ]
 
             result = ToolResultObject(
@@ -222,12 +214,12 @@ class Conversation:
             self.cache.put_cache(tool_use_oid, self.cache.insert(result))
 
         content = self.cache.insert(
-            ContentObject(
-                content=ToolResultBlockParam(
+            ContentObject.from_api(
+                ToolResultBlockParam(
                     type="tool_result",
                     tool_use_id=tool_use.id,
                     content=[
-                        ignore_type(self.cache.get_content(c).content)
+                        ignore_type(self.cache.get_content(c).to_dict())
                         for c in result.response
                     ],
                     is_error=False,

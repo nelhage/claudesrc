@@ -8,10 +8,13 @@ from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from textwrap import dedent
+from typing import cast
 
 import anthropic
 from anthropic.types import (
     MessageParam,
+    ToolResultBlockParam,
+    ToolUseBlockParam,
 )
 from pydantic import BaseModel, Field
 from scrubs import anthropic_api_key, models
@@ -406,8 +409,10 @@ What is a Maple tree? Where is the data structure defined?
                     continue
 
                 if block["type"] == "tool_use":
+                    block = cast(ToolUseBlockParam, block)
                     print(f"Use tool: {block['name']}: {block['input']}")
                 elif block["type"] == "tool_result":
+                    block = cast(ToolResultBlockParam, block)
                     content = block["content"]
                     if isinstance(content, str):
                         content = [dict(type="text", text=content)]
