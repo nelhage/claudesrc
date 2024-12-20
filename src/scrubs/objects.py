@@ -1,8 +1,9 @@
-from typing import Any, ClassVar, Literal, Type, cast, get_args
+from functools import lru_cache
+from typing import Any, ClassVar, Literal, Type, TypeVar, cast, get_args
 
 from anthropic.types import Usage
-from pydantic import BaseModel, ConfigDict, Field
-from typing_extensions import Required, TypedDict
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from typing_extensions import ReadOnly, TypedDict
 
 from scrubs.store import ObjectID
 
@@ -29,7 +30,12 @@ class ToolObject(BaseModel):
 class ContentDict(TypedDict):
     __pydantic_config__ = ConfigDict(extra="allow")  # type: ignore
 
-    type: Required[str]
+    type: ReadOnly[str]
+
+
+C = TypeVar("C", bound=ContentDict)
+
+cached_adapter = lru_cache(maxsize=16)(TypeAdapter)
 
 
 class ContentObject(BaseModel):
@@ -48,6 +54,9 @@ class ContentObject(BaseModel):
 
     def to_dict(self) -> ContentDict:
         return ContentDict(type=self.type, **self.fields)
+
+    def to_api(self, C: Type[C]) -> C:
+        return cached_adapter(C).validate_python(self.to_dict())
 
 
 class MessageObject(BaseModel):

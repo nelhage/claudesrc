@@ -2,6 +2,8 @@ from typing import Iterable, Literal, cast
 
 import anthropic
 from anthropic.types import (
+    DocumentBlockParam,
+    ImageBlockParam,
     MessageParam,
     ModelParam,
     TextBlockParam,
@@ -11,7 +13,6 @@ from anthropic.types import (
 from pydantic import BaseModel
 
 from scrubs import tool
-from scrubs.types import ignore_type
 
 from .cache import Cache
 from .objects import (
@@ -38,6 +39,15 @@ class MessageTurn(BaseModel):
     content: ContentDict
 
 
+BlockParam = (
+    TextBlockParam
+    | ImageBlockParam
+    | ToolUseBlockParam
+    | ToolResultBlockParam
+    | DocumentBlockParam
+)
+
+
 def insert_tool(cache: Cache, tool: tool.Tool) -> ObjectID:
     return cache.insert(
         ToolObject(
@@ -62,7 +72,7 @@ class Conversation:
     ):
         self.cache = cache
         self.client = client
-        self.system_prompt: tuple[ContentObject] = tuple(
+        self.system_prompt: tuple[ContentObject, ...] = tuple(
             ContentObject.from_api(p) for p in system_prompt
         )
         self.seed = seed
@@ -101,7 +111,7 @@ class Conversation:
         )
 
         block = self.cache.get_content(content).to_dict()
-        turn = MessageParam(role=role, content=[ignore_type(block)])
+        turn = MessageParam(role=role, content=[cast(BlockParam, block)])
 
         self.turns.append(turn)
         return MessageTurn(role=role, content=block)
@@ -149,7 +159,7 @@ class Conversation:
         reply = self.client.messages.create(
             messages=self.turns,
             model=model.model,
-            system=[ignore_type(p.to_dict()) for p in self.system_prompt],
+            system=[p.to_api(TextBlockParam) for p in self.system_prompt],
             tools=[to_api_block(tool) for tool in self.tools.values()],
             max_tokens=create.max_tokens,
         )
@@ -219,7 +229,7 @@ class Conversation:
                     type="tool_result",
                     tool_use_id=tool_use.id,
                     content=[
-                        ignore_type(self.cache.get_content(c).to_dict())
+                        self.cache.get_content(c).to_api(TextBlockParam)
                         for c in result.response
                     ],
                     is_error=False,
