@@ -33,13 +33,13 @@ class ListFiles(Tool):
 
     input_schema = Params.model_json_schema()
 
-    def call_tool(self, raw: dict) -> str:
+    def call_tool(self, args: dict) -> str:
         out = io.StringIO()
         write = partial(print, file=out)
 
-        args = self.Params.model_validate(raw)
+        params = self.Params.model_validate(args)
 
-        paths = args.path if isinstance(args.path, list) else [args.path]
+        paths = params.path if isinstance(params.path, list) else [params.path]
         for rel in paths:
             path = self.root / rel
             if not path.is_dir():
@@ -83,13 +83,13 @@ class ReadFiles(Tool):
 
     input_schema = Params.model_json_schema()
 
-    def call_tool(self, raw: dict) -> str:
+    def call_tool(self, args: dict) -> str:
         out = io.StringIO()
         write = partial(print, file=out)
 
-        args = self.Params.model_validate(raw)
+        params = self.Params.model_validate(args)
 
-        paths = args.path if isinstance(args.path, list) else [args.path]
+        paths = params.path if isinstance(params.path, list) else [params.path]
         for rel in paths:
             path = self.root / rel
             if not path.is_file():
@@ -147,13 +147,13 @@ class SearchFiles(Tool):
 
     input_schema = Params.model_json_schema()
 
-    def call_tool(self, raw: dict) -> str:
-        args = self.Params.model_validate(raw)
+    def call_tool(self, args: dict) -> str:
+        params = self.Params.model_validate(args)
 
         cmd = [
             "rg",
             "-e",
-            args.pattern,
+            params.pattern,
             "-n",
             "-M",
             "200",
@@ -161,11 +161,11 @@ class SearchFiles(Tool):
             "-H",
             "--no-heading",
         ]
-        if args.glob:
-            for pat in args.glob:
+        if params.glob:
+            for pat in params.glob:
                 cmd.extend(["-g", pat])
-        if args.path:
-            cmd.append(args.path)
+        if params.path:
+            cmd.append(params.path)
 
         try:
             out = subprocess.check_output(cmd, cwd=self.root, text=True)

@@ -176,7 +176,7 @@ What is a Maple tree? Where is the data structure defined?
                     print(f"Use tool: {block['name']}: {block['input']}")
                 elif block["type"] == "tool_result":
                     block = cast(ToolResultBlockParam, block)
-                    content = block["content"]
+                    content = block.get("content", "")
                     if isinstance(content, str):
                         content = [dict(type="text", text=content)]
                     lines = sum(

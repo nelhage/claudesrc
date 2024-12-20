@@ -12,6 +12,7 @@ dependencies = [
 
 [tool.uv]
 dev-dependencies = [
+    "pyright>=1.1.391",
     "ruff>=0.6.9",
 ]
 

@@ -28,6 +28,6 @@ def test_store():
     assert get1 is not None
     assert Object.model_validate_json(get1.object).words == ["sam", "frodo"]
 
-    assert json.loads(store.get(id2).object)["words"] == ["apples"]
+    assert json.loads(store.get(id2).object)["words"] == ["apples"]  # type: ignore
 
     assert store.object_count() == 2

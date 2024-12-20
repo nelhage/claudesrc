@@ -1,9 +1,9 @@
 from textwrap import dedent
 
 import anthropic
+from pydantic import BaseModel, Field
 from scrubs import anthropic_api_key, models
 from scrubs.tool import Tool, to_api_block
-from pydantic import BaseModel, Field
 
 
 class TestTool(Tool):
@@ -23,6 +23,9 @@ class TestTool(Tool):
     """)
 
     input_schema = Params.model_json_schema()
+
+    def cache_params(self):
+        return {}
 
     def call_tool(self, args) -> str:
         return "I gotcha!"
