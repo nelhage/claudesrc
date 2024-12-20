@@ -7,8 +7,6 @@ from anthropic.types import (
     ModelParam,
     TextBlockParam,
     ToolResultBlockParam,
-    ToolUseBlock,
-    ToolUseBlockParam,
 )
 from pydantic import BaseModel, TypeAdapter
 

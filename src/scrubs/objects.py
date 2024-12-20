@@ -1,10 +1,9 @@
-import json
-from typing import Any, ClassVar, Literal, Type, TypeVar, get_args
+from typing import Any, ClassVar, Literal, Type, get_args
 
 from anthropic.types import Usage
 from pydantic import BaseModel, Field
 
-from scrubs.store import ObjectID, Store, compact_dumps
+from scrubs.store import ObjectID
 
 DEFAULT_MAX_TOKENS = 1024
 

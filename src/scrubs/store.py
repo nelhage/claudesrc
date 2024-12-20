@@ -1,9 +1,7 @@
 import json
 import sqlite3
-import typing
 from dataclasses import dataclass
 from hashlib import blake2b
-from typing import Type, TypeVar
 
 
 def hashobj(obj: str):

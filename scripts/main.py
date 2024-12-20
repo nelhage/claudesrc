@@ -1,6 +1,5 @@
 import html
 import io
-import json
 import os
 import subprocess
 import tempfile
@@ -13,12 +12,11 @@ from textwrap import dedent
 import anthropic
 from anthropic.types import (
     MessageParam,
-    TextBlockParam,
 )
 from pydantic import BaseModel, Field
 from scrubs import anthropic_api_key, models
 from scrubs.cache import Cache
-from scrubs.conversation import Conversation, MessageTurn
+from scrubs.conversation import Conversation
 from scrubs.store import Store
 from scrubs.tool import Tool
 
@@ -359,7 +357,6 @@ def begin_conversation(cache: Cache, client: anthropic.Client) -> Conversation:
 @contextmanager
 def breakpoint_on_exception():
     import pdb
-    import sys
 
     try:
         yield
