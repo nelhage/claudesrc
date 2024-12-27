@@ -1,8 +1,9 @@
 from functools import lru_cache
-from typing import Any, ClassVar, Literal, Type, TypeVar, cast, get_args
+from typing import Annotated, Any, ClassVar, Literal, Type, TypeVar, cast, get_args
 
 from anthropic.types import Usage
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, GetPydanticSchema, TypeAdapter
+from pydantic_core import core_schema
 from typing_extensions import ReadOnly, TypedDict
 
 from scrubs.store import ObjectID
@@ -30,7 +31,14 @@ class ToolObject(BaseModel):
 class ContentDict(TypedDict):
     __pydantic_config__ = ConfigDict(extra="allow")  # type: ignore
 
-    type: ReadOnly[str]
+    type: Annotated[
+        ReadOnly[str],
+        GetPydanticSchema(
+            lambda tp, handler: core_schema.no_info_after_validator_function(
+                str, handler(str)
+            )
+        ),
+    ]
 
 
 C = TypeVar("C", bound=ContentDict)
