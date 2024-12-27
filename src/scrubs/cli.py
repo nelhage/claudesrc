@@ -8,11 +8,13 @@ from textwrap import dedent
 from typing import cast
 
 import anthropic
+import click
 from anthropic.types import (
     MessageParam,
     ToolResultBlockParam,
     ToolUseBlockParam,
 )
+
 from scrubs import anthropic_api_key, models
 from scrubs.cache import Cache
 from scrubs.conversation import Conversation
@@ -137,8 +139,13 @@ def breakpoint_on_exception():
 CACHE_DIR = Path("~/.cache/scrubs").expanduser()
 
 
-@breakpoint_on_exception()
+@click.group()
 def main():
+    pass
+
+
+@main.command()
+def new():
     client = anthropic.Client(api_key=anthropic_api_key())
 
     CACHE_DIR.mkdir(exist_ok=True, parents=True)
@@ -190,7 +197,3 @@ What is a Maple tree? Where is the data structure defined?
             if not user_turn:
                 break
             conversation.append_user(user_turn)
-
-
-if __name__ == "__main__":
-    main()
