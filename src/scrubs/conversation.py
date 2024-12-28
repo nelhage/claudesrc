@@ -91,11 +91,6 @@ class Conversation:
         self.turns: list[MessageParam] = []
         self.prompt: ObjectID | None = None
 
-    def user_prompt(self, prompt, seed: int | None = None) -> Iterable[MessageTurn]:
-        self.append_user(prompt)
-
-        return self.pump(seed)
-
     def append_user(self, prompt: str | TextBlockParam):
         self.append_turn(
             role="user",
