@@ -1,5 +1,6 @@
 import traceback
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
 
@@ -32,19 +33,43 @@ def breakpoint_on_exception():
 CACHE_DIR = Path("~/.cache/scrubs").expanduser()
 
 
+@dataclass
+class State:
+    cache_dir: str
+    cache: Cache
+    client: anthropic.Client
+
+
 @click.group()
-def main():
+@click.option(
+    "--cache-dir",
+    type=Path,
+    default=CACHE_DIR,
+    metavar="DIR",
+    help="Path to persistent cache",
+)
+@click.pass_context
+def main(ctx: click.Context, cache_dir):
+    client = anthropic.Client(api_key=anthropic_api_key())
+
+    cache_dir.mkdir(exist_ok=True, parents=True)
+
+    store = Store(str(cache_dir / "cache.sqlite"))
+    cache = Cache(store)
+
+    ctx.obj = State(
+        cache_dir=cache_dir,
+        cache=cache,
+        client=client,
+    )
     pass
 
 
 @main.command()
-def sourcetool():
-    client = anthropic.Client(api_key=anthropic_api_key())
-
-    CACHE_DIR.mkdir(exist_ok=True, parents=True)
-
-    store = Store(str(CACHE_DIR / "cache.sqlite"))
-    cache = Cache(store)
+@click.pass_context
+def sourcetool(ctx: click.Context):
+    state = ctx.find_object(State)
+    assert state is not None
 
     repo_name = "The Linux Kernel"
     repo = Path("~/code/linux/").expanduser()
@@ -75,8 +100,8 @@ def sourcetool():
     ]
 
     conversation = Conversation(
-        cache=cache,
-        client=client,
+        cache=state.cache,
+        client=state.client,
         model=models.SONNET_3_5,
         system_prompt=system,
         tools=tools,
@@ -107,22 +132,20 @@ What is a Maple tree? Where is the data structure defined?
 )
 @click.option("--seed", default=1, type=int, help="Seed for caching responses")
 @click.argument("query", default=None, type=str, required=False)
+@click.pass_context
 def query(
+    ctx: click.Context,
     query: str | None = None,
     model: str = models.SONNET_3_5,
     system: list[str] = [],
     seed: int = 0,
 ):
-    client = anthropic.Client(api_key=anthropic_api_key())
-
-    CACHE_DIR.mkdir(exist_ok=True, parents=True)
-
-    store = Store(str(CACHE_DIR / "cache.sqlite"))
-    cache = Cache(store)
+    state = ctx.find_object(State)
+    assert state is not None
 
     conversation = Conversation(
-        cache=cache,
-        client=client,
+        cache=state.cache,
+        client=state.client,
         model=models.SONNET_3_5,
         system_prompt=system,
         seed=seed,
