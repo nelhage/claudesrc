@@ -15,47 +15,6 @@ from scrubs.tool import Tool
 from scrubs.tools.repo import ListFiles, ReadFiles, SearchFiles
 
 
-def tools_for(repo: Path) -> list[Tool]:
-    return [ListFiles(repo), ReadFiles(repo), SearchFiles(repo)]
-
-
-def begin_conversation(cache: Cache, client: anthropic.Client) -> Conversation:
-    repo_name = "The Linux Kernel"
-    root = Path("~/code/linux/").expanduser()
-
-    SYSTEM_PROMPT = dedent("""\
-    You are an agent who helps experienced software engineers
-    understand and learn about large and complex codebases. You have
-    access to a git checkout of a source code repository, and tools
-    for exploring it. Your job is to answer the user's questions based
-    on reference to the source.
-
-    You will mention specific source files and functions in your
-    answers, where appropriate. You will answer questions at a high-
-    level conceptual and architectural level by default, but be
-    willing to explain specific implementation details with reference
-    to the source when useful.
-
-    In general you work in repositories too large for a human to read
-    or to fit in your context window; you will need to use search
-    tools to discover and read the relevant files.
-    """)
-
-    system = [
-        SYSTEM_PROMPT,
-        f"Today, you are working in {repo_name} ({root.name}.git)",
-    ]
-
-    convo = Conversation(
-        cache=cache,
-        client=client,
-        model=models.SONNET_3_5,
-        system_prompt=system,
-        tools=tools_for(root),
-    )
-    return convo
-
-
 @contextmanager
 def breakpoint_on_exception():
     import pdb
@@ -87,7 +46,41 @@ def sourcetool():
     store = Store(str(CACHE_DIR / "cache.sqlite"))
     cache = Cache(store)
 
-    conversation = begin_conversation(cache, client)
+    repo_name = "The Linux Kernel"
+    repo = Path("~/code/linux/").expanduser()
+
+    tools = [ListFiles(repo), ReadFiles(repo), SearchFiles(repo)]
+
+    SYSTEM_PROMPT = dedent("""\
+    You are an agent who helps experienced software engineers
+    understand and learn about large and complex codebases. You have
+    access to a git checkout of a source code repository, and tools
+    for exploring it. Your job is to answer the user's questions based
+    on reference to the source.
+
+    You will mention specific source files and functions in your
+    answers, where appropriate. You will answer questions at a high-
+    level conceptual and architectural level by default, but be
+    willing to explain specific implementation details with reference
+    to the source when useful.
+
+    In general you work in repositories too large for a human to read
+    or to fit in your context window; you will need to use search
+    tools to discover and read the relevant files.
+    """)
+
+    system = [
+        SYSTEM_PROMPT,
+        f"Today, you are working in {repo_name} ({repo.name}.git)",
+    ]
+
+    conversation = Conversation(
+        cache=cache,
+        client=client,
+        model=models.SONNET_3_5,
+        system_prompt=system,
+        tools=tools,
+    )
 
     query = """\
 What is a Maple tree? Where is the data structure defined?
