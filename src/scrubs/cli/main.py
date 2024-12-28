@@ -15,6 +15,9 @@ from scrubs.store import Store
 from scrubs.tool import Tool
 from scrubs.tools.repo import ListFiles, ReadFiles, SearchFiles
 
+from . import objects
+from .state import State
+
 
 @contextmanager
 def breakpoint_on_exception():
@@ -31,13 +34,6 @@ def breakpoint_on_exception():
 
 
 CACHE_DIR = Path("~/.cache/scrubs").expanduser()
-
-
-@dataclass
-class State:
-    cache_dir: str
-    cache: Cache
-    client: anthropic.Client
 
 
 @click.group()
@@ -155,3 +151,6 @@ def query(
         conversation.append_user(query)
 
     run_interactive_conversation(conversation)
+
+
+objects.register_commands(main)
