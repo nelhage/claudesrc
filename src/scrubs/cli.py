@@ -104,7 +104,14 @@ What is a Maple tree? Where is the data structure defined?
     type=click.Choice(tuple(models.MODEL_ALIASES.keys())),
     help="Model to use",
 )
-@click.option("--system", default=(), type=tuple[str, ...], multiple=True)
+@click.option(
+    "--system",
+    default=(),
+    type=tuple[str, ...],
+    multiple=True,
+    metavar="PROMPT",
+    help="System prompt",
+)
 @click.option("--seed", default=1, type=int, help="Seed for caching responses")
 @click.argument("query", default=None, type=str, required=False)
 def query(
