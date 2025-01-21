@@ -1,6 +1,5 @@
 from typing import Type, TypeVar
 
-
 from .objects import (
     OBJECT_TYPES,
     ContentObject,
@@ -27,8 +26,10 @@ class Cache:
     def insert(self, obj: ObjectType) -> ObjectID:
         return self.store.insert(obj.object_type, dump_object(obj))
 
-    def get(self, id: ObjectID) -> ObjectType:
-        got = self.store.fetch(id)
+    def get(self, id: ObjectID) -> ObjectType | None:
+        got = self.store.get(id)
+        if got is None:
+            return None
         return OBJECT_TYPES[got.type].model_validate_json(got.object)
 
     def get_type(self, id: ObjectID, ty: Type[Obj]) -> Obj:
