@@ -1,3 +1,4 @@
+import sys
 import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -151,6 +152,40 @@ def query(
         conversation.append_user(query)
 
     run_interactive_conversation(conversation)
+
+
+@main.command()
+@click.option(
+    "--model",
+    default=models.SONNET_3_5,
+    type=click.Choice(tuple(models.MODEL_ALIASES.keys())),
+    help="Model to use",
+)
+@click.argument("query", type=str, required=False, default=None)
+@click.pass_context
+def count_tokens(
+    ctx: click.Context,
+    query: str | None = None,
+    model: str = models.SONNET_3_5,
+):
+    state = ctx.find_object(State)
+    assert state is not None
+
+    text = query
+    if text is None:
+        text = sys.stdin.read()
+
+    resp = state.client.messages.count_tokens(
+        model=model,
+        messages=[
+            {
+                "role": "user",
+                "content": text,
+            }
+        ],
+    )
+
+    print(resp.input_tokens)
 
 
 objects.register_commands(main)
