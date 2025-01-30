@@ -1,6 +1,5 @@
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import cast
 
@@ -52,6 +51,10 @@ def render_turn(fh, turn: MessageParam):
         print(file=fh)
 
 
+class StopConversation(Exception):
+    pass
+
+
 def read_user_turn(tmpdir: Path, convo: Conversation) -> str | None:
     md_path = tmpdir / "claude.md"
 
@@ -66,43 +69,39 @@ def read_user_turn(tmpdir: Path, convo: Conversation) -> str | None:
     bits = reply.split(USER_SEPARATOR, 2)
     if len(bits) == 1:
         return None
+
     return bits[1]
 
 
-def run_interactive_conversation(conversation: Conversation, seed: int | None = None):
-    with tempfile.TemporaryDirectory() as td:
-        td = Path(td)
-        while True:
-            for turn in conversation.pump(seed):
-                if isinstance(turn.content, dict):
-                    type = turn.content.get("type", "<dict>")
-                else:
-                    type = "str"
+def run_conversation(
+    conversation: Conversation, handle_user_turn, seed: int | None = None
+):
+    while True:
+        for turn in conversation.pump(seed):
+            if isinstance(turn.content, dict):
+                type = turn.content.get("type", "<dict>")
+            else:
+                type = "str"
 
-                print(
-                    f"Turn role={turn.role} type={type}: prompt={conversation.prompt}"
+            print(f"Turn role={turn.role} type={type}: prompt={conversation.prompt}")
+
+            block = turn.content
+            if not isinstance(block, dict):
+                continue
+
+            if block["type"] == "tool_use":
+                block = cast(ToolUseBlockParam, block)
+                print(f"Use tool: {block['name']}: {block['input']}")
+            elif block["type"] == "tool_result":
+                block = cast(ToolResultBlockParam, block)
+                content = block.get("content", "")
+                if isinstance(content, str):
+                    content = [dict(type="text", text=content)]
+                lines = sum(
+                    block["text"].count("\n") for block in content if "text" in block
                 )
-
-                block = turn.content
-                if not isinstance(block, dict):
-                    continue
-
-                if block["type"] == "tool_use":
-                    block = cast(ToolUseBlockParam, block)
-                    print(f"Use tool: {block['name']}: {block['input']}")
-                elif block["type"] == "tool_result":
-                    block = cast(ToolResultBlockParam, block)
-                    content = block.get("content", "")
-                    if isinstance(content, str):
-                        content = [dict(type="text", text=content)]
-                    lines = sum(
-                        block["text"].count("\n")
-                        for block in content
-                        if "text" in block
-                    )
-                    print(f"Tool done: <returned {lines} lines>")
-
-            user_turn = read_user_turn(td, conversation)
-            if not user_turn:
+                print(f"Tool done: <returned {lines} lines>")
+            try:
+                handle_user_turn(conversation)
+            except StopConversation:
                 break
-            conversation.append_user(user_turn)

@@ -1,17 +1,19 @@
 import sys
+import tempfile
 import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from textwrap import dedent
 
 import anthropic
 import click
 
-from scrubs import anthropic_api_key, models
+from scrubs import anthropic_api_key, models, prompts
 from scrubs.cache import Cache
 from scrubs.conversation import Conversation
-from scrubs.interface import run_interactive_conversation
+from scrubs.interface import StopConversation, read_user_turn, run_conversation
 from scrubs.store import Store
 from scrubs.tool import Tool
 from scrubs.tools.repo import ListFiles, ReadFiles, SearchFiles
@@ -70,6 +72,23 @@ modelarg = click.option(
 )
 
 
+def do_user_turn(td: Path, convo: Conversation):
+    turn = read_user_turn(td, convo)
+    if turn is None:
+        raise StopConversation()
+    convo.append_user(turn)
+
+
+def cli_conversation(conversation: Conversation, force_user_start: bool = False):
+    with tempfile.TemporaryDirectory() as td:
+        handle_user = partial(do_user_turn, Path(td))
+
+        if force_user_start:
+            handle_user(conversation)
+
+        run_conversation(conversation, handle_user)
+
+
 @main.command()
 @modelarg
 @click.pass_context
@@ -118,7 +137,7 @@ What is a Maple tree? Where is the data structure defined?
 """
 
     conversation.append_user(query)
-    run_interactive_conversation(conversation)
+    cli_conversation(conversation)
 
 
 @main.command()
@@ -126,7 +145,7 @@ What is a Maple tree? Where is the data structure defined?
 @click.option(
     "--system",
     default=(),
-    type=tuple[str, ...],
+    type=str,
     multiple=True,
     metavar="PROMPT",
     help="System prompt",
@@ -139,6 +158,15 @@ What is a Maple tree? Where is the data structure defined?
     metavar="PATH",
     help="Include tools for accessing a git repository",
 )
+@click.option(
+    "--file",
+    default=[],
+    type=str,
+    required=False,
+    multiple=True,
+    metavar="PATH",
+    help="Include one or more files in the context",
+)
 @click.option("--seed", default=1, type=int, help="Seed for caching responses")
 @click.argument("query", default=None, type=str, required=False)
 @click.pass_context
@@ -148,6 +176,7 @@ def query(
     repo: str | None = None,
     model: str = models.SONNET_3_5,
     system: tuple[str, ...] = (),
+    file: list[str] = [],
     seed: int = 0,
 ):
     state = ctx.find_object(State)
@@ -174,10 +203,16 @@ def query(
         tools=tools,
     )
 
+    for f in file:
+        p = Path(f)
+        conversation.append_user(prompts.file_contents(p.name, p.read_text()))
+
     if query is not None:
+        if query == "-":
+            query = sys.stdin.read()
         conversation.append_user(query)
 
-    run_interactive_conversation(conversation)
+    cli_conversation(conversation, force_user_start=query is None)
 
 
 @main.command()
@@ -212,6 +247,27 @@ def count_tokens(
     )
 
     print(resp.input_tokens)
+
+
+@main.command()
+@click.argument("path", type=str, required=False, default=None)
+@click.option("--components", type=int, required=False, default=1)
+@click.option("--relative-to", type=str, required=False, default=None)
+def format_file(
+    path: str,
+    components: int,
+    relative_to: str | None = None,
+):
+    pobj = Path(path)
+
+    contents = pobj.read_text()
+
+    if relative_to is not None:
+        relpath = str(pobj.relative_to(relative_to))
+    else:
+        relpath = "/".join(pobj.parts[-components:])
+
+    print(prompts.file_contents(relpath, contents))
 
 
 objects.register_commands(main)

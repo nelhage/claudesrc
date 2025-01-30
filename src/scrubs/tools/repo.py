@@ -6,6 +6,7 @@ from pathlib import Path
 from textwrap import dedent
 
 from pydantic import BaseModel, Field
+from scrubs import prompts
 from scrubs.tool import Tool
 
 
@@ -99,12 +100,7 @@ class ReadFiles(Tool):
                     write(f"No such file or directory: {rel}\n")
                 continue
 
-            write(f"<file-contents path='{html.escape(rel)}'>")
-            body = path.read_text()
-            out.write(body)
-            if not body.endswith("\n"):
-                write()
-            write("</file-contents>")
+            out.write(prompts.file_contents(rel, path.read_text()))
 
         return out.getvalue()
 
