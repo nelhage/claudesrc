@@ -62,9 +62,18 @@ def main(ctx: click.Context, cache_dir):
     pass
 
 
+modelarg = click.option(
+    "--model",
+    default=models.SONNET_3_5,
+    type=click.Choice(tuple(models.MODEL_ALIASES.keys())),
+    help="Model to use",
+)
+
+
 @main.command()
+@modelarg
 @click.pass_context
-def sourcetool(ctx: click.Context):
+def sourcetool(ctx: click.Context, model: str):
     state = ctx.find_object(State)
     assert state is not None
 
@@ -99,7 +108,7 @@ def sourcetool(ctx: click.Context):
     conversation = Conversation(
         cache=state.cache,
         client=state.client,
-        model=models.SONNET_3_5,
+        model=model,
         system_prompt=system,
         tools=tools,
     )
@@ -113,12 +122,7 @@ What is a Maple tree? Where is the data structure defined?
 
 
 @main.command()
-@click.option(
-    "--model",
-    default=models.SONNET_3_5,
-    type=click.Choice(tuple(models.MODEL_ALIASES.keys())),
-    help="Model to use",
-)
+@modelarg
 @click.option(
     "--system",
     default=(),
@@ -127,18 +131,39 @@ What is a Maple tree? Where is the data structure defined?
     metavar="PROMPT",
     help="System prompt",
 )
+@click.option(
+    "--repo",
+    default=None,
+    type=str,
+    required=None,
+    metavar="PATH",
+    help="Include tools for accessing a git repository",
+)
 @click.option("--seed", default=1, type=int, help="Seed for caching responses")
 @click.argument("query", default=None, type=str, required=False)
 @click.pass_context
 def query(
     ctx: click.Context,
     query: str | None = None,
+    repo: str | None = None,
     model: str = models.SONNET_3_5,
-    system: list[str] = [],
+    system: tuple[str, ...] = (),
     seed: int = 0,
 ):
     state = ctx.find_object(State)
     assert state is not None
+
+    if repo is not None:
+        repopath: Path = Path(repo)
+        system = system + (
+            f"You are answering questions in the context of the git repository `{repopath.name}.git`."
+            " You have access to tools to search and read files in this repository."
+            " Use them as appropriate to answer the user's questions.",
+        )
+
+        tools = [ListFiles(repopath), ReadFiles(repopath), SearchFiles(repopath)]
+    else:
+        tools = []
 
     conversation = Conversation(
         cache=state.cache,
@@ -146,6 +171,7 @@ def query(
         model=models.SONNET_3_5,
         system_prompt=system,
         seed=seed,
+        tools=tools,
     )
 
     if query is not None:
