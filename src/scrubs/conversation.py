@@ -58,6 +58,44 @@ def insert_tool(ctx: Context, tool: tool.Tool) -> ObjectID:
     )
 
 
+def flatten_prompt(ctx: Context, prompt: ObjectID | None) -> list[MessageParam]:
+    """Flatten a prompt object in order to feed it to the API.
+
+    Args:
+        ctx: Context object for accessing stored objects
+        prompt: ObjectID of the prompt to flatten, or None
+
+    Returns:
+        List of MessageParam objects ready for the API in chronological order
+    """
+    messages: list[MessageParam] = []
+    current_prompt = prompt
+
+    # Build list in reverse order (most recent first)
+    while current_prompt is not None:
+        prompt_obj = ctx.get_prompt(current_prompt)
+
+        # Get content for current message
+        message = prompt_obj.message
+        content_obj = ctx.get_content(message.content)
+        content = content_obj.to_dict()
+
+        # Add message to list
+        messages.append(
+            {
+                "role": message.role,
+                "content": [content],  # type:ignore
+            }
+        )
+
+        # Move to prefix
+        current_prompt = prompt_obj.prefix
+
+    # Reverse to get chronological order
+    messages.reverse()
+    return messages
+
+
 class Conversation:
     def __init__(
         self,
