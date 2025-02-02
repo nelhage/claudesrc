@@ -70,6 +70,9 @@ def read_user_turn(tmpdir: Path, convo: Conversation) -> str | None:
     if len(bits) == 1:
         return None
 
+    if not bits[1].strip():
+        return None
+
     return bits[1]
 
 
@@ -101,7 +104,7 @@ def run_conversation(
                     block["text"].count("\n") for block in content if "text" in block
                 )
                 print(f"Tool done: <returned {lines} lines>")
-            try:
-                handle_user_turn(conversation)
-            except StopConversation:
-                break
+        try:
+            handle_user_turn(conversation)
+        except StopConversation:
+            break
