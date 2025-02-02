@@ -43,9 +43,27 @@ def test_get_type_incorrect(ctx):
         ctx.get_type(id, ToolObject)
 
 
-def test_cache_identity_within_scope(ctx):
+def test_insert_get_preserves_identity(ctx):
     content = ContentObject(type="text", fields={"text": "hello"})
     id = ctx.insert(content)
+
+    obj1 = ctx.get(id)
+    assert obj1 is content  # Should be the exact same object in memory
+
+
+def test_insert_within_scope(ctx: Context):
+    content = ContentObject(type="text", fields={"text": "hello"})
+    with ctx.cache_scope():
+        id = ctx.insert(content)
+
+    obj1 = ctx.get(id)
+    assert obj1 is not content
+
+
+def test_cache_identity_within_scope(ctx):
+    c1 = Context(ctx.store)
+    content = ContentObject(type="text", fields={"text": "hello"})
+    id = c1.insert(content)
 
     with ctx.cache_scope():
         obj1 = ctx.get(id)
@@ -63,9 +81,10 @@ def test_cache_across_scopes(ctx):
         assert obj1 is obj2  # Should still be the same object
 
 
-def test_cache_scope_isolation(ctx):
+def test_cache_scope_isolation(ctx: Context):
+    c1 = Context(ctx.store)
     content = ContentObject(type="text", fields={"text": "hello"})
-    id = ctx.insert(content)
+    id = c1.insert(content)
 
     with ctx.cache_scope():
         obj1 = ctx.get(id)

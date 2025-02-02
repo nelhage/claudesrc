@@ -91,7 +91,9 @@ class Context:
         id = self.store.hash_object(flat)
         if id in self.object_cache:
             return id
-        return self.store.insert(obj.object_type, flat)
+        id = self.store.insert(obj.object_type, flat)
+        self.object_cache.set(id, obj)
+        return id
 
     def get(self, id: ObjectID) -> ObjectType | None:
         if inmem := self.object_cache.get(id):
