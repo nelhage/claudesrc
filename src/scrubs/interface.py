@@ -10,7 +10,10 @@ from anthropic.types import (
     ToolUseBlockParam,
 )
 
+from scrubs.context import Context, walk_prompt_chain
 from scrubs.conversation import Conversation
+from scrubs.objects import MessageObject, PromptObject, ToolResultObject, ToolUseObject
+from scrubs.store import ObjectID
 
 USER_SEPARATOR = "# Respond below this line. Delete this header to exit\n"
 
@@ -39,50 +42,52 @@ def format_text(role, text) -> str:
     return "\n".join([header, f"[{nlines} lines]", footer])
 
 
-def render_turn(fh, turn: MessageParam):
-    lines = []
-    header = f"# {turn['role'].title()}"
+def render_content(ctx: Context, fh, role: str, content_id: ObjectID):
+    content = ctx.get_content(content_id)
+    content_dict = content.to_dict()
 
-    if isinstance(turn["content"], str):
-        lines.append(header)
-        lines.append(turn["content"])
-    else:
-        for block in turn["content"]:
-            assert isinstance(block, dict)
-            match block["type"]:
-                case "text":
-                    lines.append(header)
-                    lines.append(format_text(turn["role"], block["text"]))
-                case "tool_use":
-                    lines.append(f"# tool_use tool={block['name']}: {block['input']}")
-                case "tool_result":
-                    content = block.get("content", "")
-                    if isinstance(content, str):
-                        content = [dict(type="text", text=content)]
-                    nlines = sum(c.get("text", "").count("\n") for c in content)
+    match content_dict["type"]:
+        case "text":
+            text = content_dict.get("text", "")
+            print(format_text(role, text), file=fh)
+            print(file=fh)
+        case "tool_use":
+            tool_use = ctx.get_tool_use(content_id)
+            tool = ctx.get_tool(tool_use.tool)
+            print(f"# tool_use tool={tool.name}: {tool_use.input}", file=fh)
+            print(file=fh)
+        case "tool_result":
+            tool_result = ctx.get_tool_result(content_id)
+            nlines = 0
+            for resp_id in tool_result.response:
+                resp = ctx.get_content(resp_id)
+                if resp.type == "text":
+                    nlines += resp.fields.get("text", "").count("\n")
 
-                    lines.append(
-                        f"# tool_result lines={nlines} error={block.get('is_error', False)}"
-                    )
-                case _:
-                    raise AssertionError(f"Unknown block: {block!r}")
-
-    for line in lines:
-        print(line, file=fh)
-        print(file=fh)
+            print(f"# tool_result lines={nlines}", file=fh)
+            print(file=fh)
+        case _:
+            raise AssertionError(f"Unknown content type: {content_dict['type']!r}")
 
 
-class StopConversation(Exception):
-    pass
+def render_message(ctx: Context, fh, message: MessageObject):
+    header = f"# {message.role.title()}"
+    print(header, file=fh)
+    print(file=fh)
+
+    render_content(ctx, fh, message.role, message.content)
 
 
-def read_user_turn(tmpdir: Path, convo: Conversation) -> str | None:
+def read_user_turn(ctx: Context, tmpdir: Path, convo: Conversation) -> str | None:
     md_path = tmpdir / "claude.md"
 
     with md_path.open("w") as fh:
         print("# -*- mode: markdown; mode: visual-line; -*-", file=fh)
-        for turn in convo.turns:
-            render_turn(fh, turn)
+
+        prompt = convo.prompt
+        for message in walk_prompt_chain(ctx, prompt):
+            render_message(ctx, fh, message)
+
         print(USER_SEPARATOR, file=fh)
 
     subprocess.check_call([os.getenv("EDITOR", "vi"), md_path])
@@ -95,6 +100,10 @@ def read_user_turn(tmpdir: Path, convo: Conversation) -> str | None:
         return None
 
     return bits[1]
+
+
+class StopConversation(Exception):
+    pass
 
 
 def run_conversation(

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from scrubs import tool
 
-from .context import Context
+from .context import Context, flatten_prompt
 from .objects import (
     DEFAULT_MAX_TOKENS,
     ContentDict,
@@ -58,44 +58,6 @@ def insert_tool(ctx: Context, tool: tool.Tool) -> ObjectID:
     )
 
 
-def flatten_prompt(ctx: Context, prompt: ObjectID | None) -> list[MessageParam]:
-    """Flatten a prompt object in order to feed it to the API.
-
-    Args:
-        ctx: Context object for accessing stored objects
-        prompt: ObjectID of the prompt to flatten, or None
-
-    Returns:
-        List of MessageParam objects ready for the API in chronological order
-    """
-    messages: list[MessageParam] = []
-    current_prompt = prompt
-
-    # Build list in reverse order (most recent first)
-    while current_prompt is not None:
-        prompt_obj = ctx.get_prompt(current_prompt)
-
-        # Get content for current message
-        message = prompt_obj.message
-        content_obj = ctx.get_content(message.content)
-        content = content_obj.to_dict()
-
-        # Add message to list
-        messages.append(
-            {
-                "role": message.role,
-                "content": [content],  # type:ignore
-            }
-        )
-
-        # Move to prefix
-        current_prompt = prompt_obj.prefix
-
-    # Reverse to get chronological order
-    messages.reverse()
-    return messages
-
-
 class Conversation:
     def __init__(
         self,
@@ -125,8 +87,6 @@ class Conversation:
         )
 
         self.tools = {t.name: t for t in tools}
-
-        self.turns: list[MessageParam] = []
         self.prompt: ObjectID | None = None
 
     def append_user(self, prompt: str | TextBlockParam):
@@ -144,9 +104,6 @@ class Conversation:
         )
 
         block = self.ctx.get_content(content).to_dict()
-        turn = MessageParam(role=role, content=[cast(BlockParam, block)])
-
-        self.turns.append(turn)
         return MessageTurn(role=role, content=block)
 
     def pump(self, seed: int | None = None) -> Iterable[MessageTurn]:
@@ -187,10 +144,10 @@ class Conversation:
         create_id = self.ctx.insert(create)
         model = self.ctx.get_model_opts(create.model)
 
-        # TODO: re-serialize the turns and confirm consistency?
+        messages = flatten_prompt(self.ctx, create.prompt)
 
         reply = self.client.messages.create(
-            messages=self.turns,
+            messages=messages,
             model=model.model,
             system=[p.to_api(TextBlockParam) for p in self.system_prompt],
             tools=[to_api_block(tool) for tool in self.tools.values()],
@@ -222,7 +179,7 @@ class Conversation:
         message = self.ctx.get_content(last.content).to_dict()
 
         if message["type"] != "tool_use":
-            return
+            return None
 
         message = cast(ToolUseBlockParam, message)
 

@@ -73,16 +73,18 @@ modelarg = click.option(
 )
 
 
-def do_user_turn(td: Path, convo: Conversation):
-    turn = read_user_turn(td, convo)
+def do_user_turn(ctx: Context, td: Path, convo: Conversation):
+    turn = read_user_turn(ctx, td, convo)
     if turn is None:
         raise StopConversation()
     convo.append_user(turn)
 
 
-def cli_conversation(conversation: Conversation, force_user_start: bool = False):
+def cli_conversation(
+    ctx: Context, conversation: Conversation, force_user_start: bool = False
+):
     with tempfile.TemporaryDirectory() as td:
-        handle_user = partial(do_user_turn, Path(td))
+        handle_user = partial(do_user_turn, ctx, Path(td))
 
         if force_user_start:
             handle_user(conversation)
@@ -138,7 +140,7 @@ What is a Maple tree? Where is the data structure defined?
 """
 
     conversation.append_user(query)
-    cli_conversation(conversation)
+    cli_conversation(state.cache, conversation)
 
 
 @main.command()
@@ -216,12 +218,13 @@ def query(
         p = Path(f)
         conversation.append_user(prompts.file_contents(p.name, p.read_text()))
 
+    if query == "-":
+        query = sys.stdin.read()
+
     if query is not None:
-        if query == "-":
-            query = sys.stdin.read()
         conversation.append_user(query)
 
-    cli_conversation(conversation, force_user_start=query is None)
+    cli_conversation(state.cache, conversation, force_user_start=query is None)
 
 
 @main.command()

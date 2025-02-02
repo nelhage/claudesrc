@@ -1,15 +1,19 @@
 from contextlib import contextmanager
 from typing import Type, TypeVar
 
+from anthropic.types import MessageParam
+
 from .objects import (
     OBJECT_TYPES,
     ContentObject,
+    MessageObject,
     ModelOptsObject,
     ObjectType,
     PromptObject,
     ResponseObject,
     ToolObject,
     ToolResultObject,
+    ToolUseObject,
 )
 from .store import ObjectID, Store
 
@@ -123,6 +127,9 @@ class Context:
     def get_response(self, id: ObjectID) -> ResponseObject:
         return self.get_type(id, ResponseObject)
 
+    def get_tool_use(self, id: ObjectID) -> ToolUseObject:
+        return self.get_type(id, ToolUseObject)
+
     def get_tool_result(self, id: ObjectID) -> ToolResultObject:
         return self.get_type(id, ToolResultObject)
 
@@ -133,3 +140,54 @@ class Context:
 
     def get_cache(self, query: ObjectID) -> ObjectID | None:
         return self.store.get_cache(query)
+
+
+def walk_prompt_chain(ctx: Context, prompt_id: ObjectID | None) -> list[MessageObject]:
+    """Walk backwards through the prompt chain"""
+    messages = []
+    current = prompt_id
+
+    while current is not None:
+        prompt = ctx.get_prompt(current)
+        messages.append(prompt.message)
+        current = prompt.prefix
+
+    return list(reversed(messages))
+
+
+def flatten_prompt(ctx: Context, prompt: ObjectID | None) -> list[MessageParam]:
+    """Flatten a prompt object in order to feed it to the API.
+
+    Args:
+        ctx: Context object for accessing stored objects
+        prompt: ObjectID of the prompt to flatten, or None
+
+    Returns:
+        List of MessageParam objects ready for the API in chronological order
+    """
+    messages: list[MessageParam] = []
+    current_prompt = prompt
+
+    # Build list in reverse order (most recent first)
+    while current_prompt is not None:
+        prompt_obj = ctx.get_prompt(current_prompt)
+
+        # Get content for current message
+        message = prompt_obj.message
+        content_obj = ctx.get_content(message.content)
+        content = content_obj.to_dict()
+
+        # Add message to list
+        messages.append(
+            {
+                "role": message.role,
+                "content": [content],  # type:ignore
+            }
+        )
+
+        # Move to prefix
+        current_prompt = prompt_obj.prefix
+
+    # Reverse to get chronological order
+    messages.reverse()
+    return messages
