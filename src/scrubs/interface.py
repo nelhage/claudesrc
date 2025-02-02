@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import cast
@@ -13,22 +14,45 @@ from scrubs.conversation import Conversation
 
 USER_SEPARATOR = "# Respond below this line. Delete this header to exit\n"
 
+FILE_CONTENT = re.compile(
+    r"""
+(?P<header><file [^\n]+>) \n
+(?P<content>.*)
+(?P<footer></file>) $
+""",
+    re.M | re.S | re.X,
+)
+
+
+def format_text(role, text) -> str:
+    if role != "user":
+        return text
+
+    m = FILE_CONTENT.search(text)
+    if m is None:
+        return text
+
+    header = m.group("header")
+    footer = m.group("footer")
+    nlines = m.group("content").count("\n")
+
+    return "\n".join([header, f"[{nlines} lines]", footer])
+
 
 def render_turn(fh, turn: MessageParam):
     lines = []
     header = f"# {turn['role'].title()}"
-    has_content = False
 
     if isinstance(turn["content"], str):
-        has_content = True
+        lines.append(header)
         lines.append(turn["content"])
     else:
         for block in turn["content"]:
             assert isinstance(block, dict)
             match block["type"]:
                 case "text":
-                    lines.append(block["text"])
-                    has_content = True
+                    lines.append(header)
+                    lines.append(format_text(turn["role"], block["text"]))
                 case "tool_use":
                     lines.append(f"# tool_use tool={block['name']}: {block['input']}")
                 case "tool_result":
@@ -42,9 +66,6 @@ def render_turn(fh, turn: MessageParam):
                     )
                 case _:
                     raise AssertionError(f"Unknown block: {block!r}")
-
-    if has_content:
-        lines.insert(0, header)
 
     for line in lines:
         print(line, file=fh)
