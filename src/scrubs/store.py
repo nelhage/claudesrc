@@ -63,11 +63,16 @@ class Store:
         self.ensure_schema()
 
     # Objects
-    def insert(self, type: str, obj: str) -> ObjectID:
+
+    def hash_object(self, obj: str) -> ObjectID:
         rt = compact_dumps(json.loads(obj))
         assert rt == obj, f"Object must round-trip: {rt!r} != {obj!r}"
 
-        id = hashobj(obj)
+        return hashobj(obj)
+
+    def insert(self, type: str, obj: str) -> ObjectID:
+        id = self.hash_object(obj)
+
         self.db.execute(
             "INSERT OR IGNORE INTO objects (id, type, object) VALUES (?, ?, ?)",
             (id, type, obj),
