@@ -22,7 +22,7 @@ def cat_object(ctx: click.Context, show_type: bool, object: str):
     state = ctx.find_object(State)
     assert state is not None
 
-    raw = state.cache.store.get(object)
+    raw = state.ctx.store.get(object)
     if raw is None:
         sys.exit(1)
 
@@ -40,7 +40,7 @@ def show(ctx: click.Context, object: str):
     state = ctx.find_object(State)
     assert state is not None
 
-    raw = state.cache.get(object)
+    raw = state.ctx.get(object)
     if raw is None:
         sys.exit(1)
 

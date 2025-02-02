@@ -59,7 +59,7 @@ def main(ctx: click.Context, cache_dir):
 
     ctx.obj = State(
         cache_dir=cache_dir,
-        cache=cache,
+        ctx=cache,
         client=client,
     )
     pass
@@ -128,7 +128,7 @@ def sourcetool(ctx: click.Context, model: str):
     ]
 
     conversation = Conversation(
-        ctx=state.cache,
+        ctx=state.ctx,
         client=state.client,
         model=model,
         system_prompt=system,
@@ -140,7 +140,7 @@ What is a Maple tree? Where is the data structure defined?
 """
 
     conversation.append_user(query)
-    cli_conversation(state.cache, conversation)
+    cli_conversation(state.ctx, conversation)
 
 
 @main.command()
@@ -205,7 +205,7 @@ def query(
         tools = []
 
     conversation = Conversation(
-        ctx=state.cache,
+        ctx=state.ctx,
         client=state.client,
         model=models.SONNET_3_5,
         system_prompt=system,
@@ -224,7 +224,7 @@ def query(
     if query is not None:
         conversation.append_user(query)
 
-    cli_conversation(state.cache, conversation, force_user_start=query is None)
+    cli_conversation(state.ctx, conversation, force_user_start=query is None)
 
 
 @main.command()

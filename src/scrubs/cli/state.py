@@ -9,5 +9,5 @@ from scrubs.context import Context
 @dataclass
 class State:
     cache_dir: Path
-    cache: Context
+    ctx: Context
     client: anthropic.Client
