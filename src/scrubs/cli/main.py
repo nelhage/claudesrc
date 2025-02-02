@@ -11,7 +11,7 @@ import anthropic
 import click
 
 from scrubs import anthropic_api_key, models, prompts
-from scrubs.cache import Cache
+from scrubs.context import Context
 from scrubs.conversation import Conversation
 from scrubs.interface import StopConversation, read_user_turn, run_conversation
 from scrubs.store import Store
@@ -54,7 +54,7 @@ def main(ctx: click.Context, cache_dir):
     cache_dir.mkdir(exist_ok=True, parents=True)
 
     store = Store(str(cache_dir / "cache.sqlite"))
-    cache = Cache(store)
+    cache = Context(store)
 
     ctx.obj = State(
         cache_dir=cache_dir,
@@ -125,7 +125,7 @@ def sourcetool(ctx: click.Context, model: str):
     ]
 
     conversation = Conversation(
-        cache=state.cache,
+        ctx=state.cache,
         client=state.client,
         model=model,
         system_prompt=system,
@@ -195,7 +195,7 @@ def query(
         tools = []
 
     conversation = Conversation(
-        cache=state.cache,
+        ctx=state.cache,
         client=state.client,
         model=models.SONNET_3_5,
         system_prompt=system,

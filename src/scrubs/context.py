@@ -19,7 +19,7 @@ def dump_object(obj: ObjectType) -> str:
     return obj.model_dump_json()
 
 
-class Cache:
+class Context:
     def __init__(self, store: Store):
         self.store = store
 
@@ -54,7 +54,7 @@ class Cache:
     def get_tool_result(self, id: ObjectID) -> ToolResultObject:
         return self.get_type(id, ToolResultObject)
 
-    # Cache
+    # API Cache
 
     def put_cache(self, query: ObjectID, response: ObjectID):
         self.store.put_cache(query, response)

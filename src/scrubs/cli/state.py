@@ -2,11 +2,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import anthropic
-from scrubs.cache import Cache
+
+from scrubs.context import Context
 
 
 @dataclass
 class State:
     cache_dir: Path
-    cache: Cache
+    cache: Context
     client: anthropic.Client

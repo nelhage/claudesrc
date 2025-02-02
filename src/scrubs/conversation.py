@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from scrubs import tool
 
-from .cache import Cache
+from .context import Context
 from .objects import (
     DEFAULT_MAX_TOKENS,
     ContentDict,
@@ -48,8 +48,8 @@ BlockParam = (
 )
 
 
-def insert_tool(cache: Cache, tool: tool.Tool) -> ObjectID:
-    return cache.insert(
+def insert_tool(ctx: Context, tool: tool.Tool) -> ObjectID:
+    return ctx.insert(
         ToolObject(
             name=tool.name,
             cache_params=tool.cache_params(),
@@ -61,7 +61,7 @@ def insert_tool(cache: Cache, tool: tool.Tool) -> ObjectID:
 class Conversation:
     def __init__(
         self,
-        cache: Cache,
+        ctx: Context,
         client: anthropic.Client,
         *,
         seed: int = 0,
@@ -70,7 +70,7 @@ class Conversation:
         system_prompt: Iterable[str | TextBlockParam] = [],
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
-        self.cache = cache
+        self.ctx = ctx
         self.client = client
         self.system_prompt: tuple[ContentObject, ...] = tuple(
             ContentObject.from_api(p) for p in system_prompt
@@ -78,11 +78,11 @@ class Conversation:
         self.seed = seed
         self.max_tokens = max_tokens
 
-        self.model = self.cache.insert(
+        self.model = self.ctx.insert(
             ModelOptsObject(
                 model=model,
-                system=[self.cache.insert(p) for p in self.system_prompt],
-                tools=[insert_tool(cache, t) for t in tools],
+                system=[self.ctx.insert(p) for p in self.system_prompt],
+                tools=[insert_tool(ctx, t) for t in tools],
             )
         )
 
@@ -94,18 +94,18 @@ class Conversation:
     def append_user(self, prompt: str | TextBlockParam):
         self.append_turn(
             role="user",
-            content=self.cache.insert(ContentObject.from_api(prompt)),
+            content=self.ctx.insert(ContentObject.from_api(prompt)),
         )
 
     def append_turn(self, role: RoleType, content: ObjectID) -> MessageTurn:
-        self.prompt = self.cache.insert(
+        self.prompt = self.ctx.insert(
             PromptObject(
                 prefix=self.prompt,
                 message=MessageObject(role=role, content=content),
             )
         )
 
-        block = self.cache.get_content(content).to_dict()
+        block = self.ctx.get_content(content).to_dict()
         turn = MessageParam(role=role, content=[cast(BlockParam, block)])
 
         self.turns.append(turn)
@@ -119,7 +119,7 @@ class Conversation:
             return
 
         while True:
-            last = self.cache.get_prompt(self.prompt).message
+            last = self.ctx.get_prompt(self.prompt).message
 
             if last.role == "user":
                 yield from self._send_user(seed)
@@ -136,9 +136,9 @@ class Conversation:
             model=self.model, prompt=self.prompt, seed=seed, max_tokens=self.max_tokens
         )
 
-        reply_obj = self.cache.get_cache(self.cache.insert(create))
+        reply_obj = self.ctx.get_cache(self.ctx.insert(create))
         if reply_obj is not None:
-            reply = self.cache.get_response(reply_obj)
+            reply = self.ctx.get_response(reply_obj)
         else:
             reply = self._send_api(create)
 
@@ -146,8 +146,8 @@ class Conversation:
             yield self.append_turn("assistant", content)
 
     def _send_api(self, create: CreateMessageObject) -> ResponseObject:
-        create_id = self.cache.insert(create)
-        model = self.cache.get_model_opts(create.model)
+        create_id = self.ctx.insert(create)
+        model = self.ctx.get_model_opts(create.model)
 
         # TODO: re-serialize the turns and confirm consistency?
 
@@ -160,7 +160,7 @@ class Conversation:
         )
 
         content = [
-            self.cache.insert(ContentObject.from_api(c.model_dump()))
+            self.ctx.insert(ContentObject.from_api(c.model_dump()))
             for c in reply.content
         ]
 
@@ -172,7 +172,7 @@ class Conversation:
             usage=reply.usage,
         )
 
-        self.cache.put_cache(create_id, self.cache.insert(response))
+        self.ctx.put_cache(create_id, self.ctx.insert(response))
 
         return response
 
@@ -180,16 +180,16 @@ class Conversation:
         if self.prompt is None:
             return None
 
-        last = self.cache.get_prompt(self.prompt).message
-        message = self.cache.get_content(last.content).to_dict()
+        last = self.ctx.get_prompt(self.prompt).message
+        message = self.ctx.get_content(last.content).to_dict()
 
         if message["type"] != "tool_use":
             return
 
         message = cast(ToolUseBlockParam, message)
 
-        tool_id = insert_tool(self.cache, self.tools[message["name"]])
-        assert tool_id in self.cache.get_model_opts(self.model).tools
+        tool_id = insert_tool(self.ctx, self.tools[message["name"]])
+        assert tool_id in self.ctx.get_model_opts(self.model).tools
 
         tool_use = ToolUseObject(
             tool=tool_id,
@@ -197,34 +197,34 @@ class Conversation:
             input=message["input"],  # type: ignore
         )
 
-        tool_use_oid = self.cache.insert(tool_use)
+        tool_use_oid = self.ctx.insert(tool_use)
 
-        result = self.cache.get_cache(tool_use_oid)
+        result = self.ctx.get_cache(tool_use_oid)
         if result is not None:
-            result = self.cache.get_tool_result(result)
+            result = self.ctx.get_tool_result(result)
         else:
-            tool = self.tools[self.cache.get_tool(tool_use.tool).name]
+            tool = self.tools[self.ctx.get_tool(tool_use.tool).name]
             result_content = tool.call_tool(tool_use.input)
             if not isinstance(result_content, list):
                 result_content = [result_content]
 
             content = [
-                self.cache.insert(ContentObject.from_api(c)) for c in result_content
+                self.ctx.insert(ContentObject.from_api(c)) for c in result_content
             ]
 
             result = ToolResultObject(
                 tool_use=tool_use_oid,
                 response=content,
             )
-            self.cache.put_cache(tool_use_oid, self.cache.insert(result))
+            self.ctx.put_cache(tool_use_oid, self.ctx.insert(result))
 
-        content = self.cache.insert(
+        content = self.ctx.insert(
             ContentObject.from_api(
                 ToolResultBlockParam(
                     type="tool_result",
                     tool_use_id=tool_use.id,
                     content=[
-                        self.cache.get_content(c).to_api(TextBlockParam)
+                        self.ctx.get_content(c).to_api(TextBlockParam)
                         for c in result.response
                     ],
                     is_error=False,
