@@ -14,6 +14,7 @@ from scrubs import anthropic_api_key, models, prompts
 from scrubs.context import Context
 from scrubs.conversation import Conversation
 from scrubs.interface import StopConversation, read_user_turn, run_conversation
+from scrubs.objects import DEFAULT_MAX_TOKENS
 from scrubs.store import Store
 from scrubs.tool import Tool
 from scrubs.tools.repo import ListFiles, ReadFiles, SearchFiles
@@ -168,12 +169,19 @@ What is a Maple tree? Where is the data structure defined?
     help="Include one or more files in the context",
 )
 @click.option("--seed", default=1, type=int, help="Seed for caching responses")
+@click.option(
+    "--max-tokens",
+    default=DEFAULT_MAX_TOKENS,
+    type=int,
+    help="Maximum tokens per model output turn",
+)
 @click.argument("query", default=None, type=str, required=False)
 @click.pass_context
 def query(
     ctx: click.Context,
     query: str | None = None,
     repo: str | None = None,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
     model: str = models.SONNET_3_5,
     system: tuple[str, ...] = (),
     file: list[str] = [],
@@ -201,6 +209,7 @@ def query(
         system_prompt=system,
         seed=seed,
         tools=tools,
+        max_tokens=max_tokens,
     )
 
     for f in file:
