@@ -7,10 +7,10 @@ from textwrap import dedent
 
 from pydantic import BaseModel, Field
 from scrubs import prompts
-from scrubs.tool import Tool
+from scrubs.tool import PydanticTool
 
 
-class ListFiles(Tool):
+class ListFiles(PydanticTool):
     def __init__(self, root: Path):
         self.root = root
 
@@ -32,13 +32,9 @@ class ListFiles(Tool):
     of lines.
     """)
 
-    input_schema = Params.model_json_schema()
-
-    def call_tool(self, args: dict) -> str:
+    def call(self, params: Params) -> str:
         out = io.StringIO()
         write = partial(print, file=out)
-
-        params = self.Params.model_validate(args)
 
         paths = params.path if isinstance(params.path, list) else [params.path]
         for rel in paths:
@@ -64,7 +60,7 @@ class ListFiles(Tool):
         return out.getvalue()
 
 
-class ReadFiles(Tool):
+class ReadFiles(PydanticTool):
     def __init__(self, root: Path):
         self.root = root
 
@@ -82,13 +78,9 @@ class ReadFiles(Tool):
     repository.
     """)
 
-    input_schema = Params.model_json_schema()
-
-    def call_tool(self, args: dict) -> str:
+    def call(self, params: Params) -> str:
         out = io.StringIO()
         write = partial(print, file=out)
-
-        params = self.Params.model_validate(args)
 
         paths = params.path if isinstance(params.path, list) else [params.path]
         for rel in paths:
@@ -105,7 +97,7 @@ class ReadFiles(Tool):
         return out.getvalue()
 
 
-class SearchFiles(Tool):
+class SearchFiles(PydanticTool):
     def __init__(self, root: Path):
         self.root = root
 
@@ -141,11 +133,7 @@ class SearchFiles(Tool):
     will be truncated.
     """)
 
-    input_schema = Params.model_json_schema()
-
-    def call_tool(self, args: dict) -> str:
-        params = self.Params.model_validate(args)
-
+    def call(self, params: Params) -> str:
         cmd = [
             "rg",
             "-e",
@@ -177,59 +165,3 @@ class SearchFiles(Tool):
                 return "<no matches>"
             else:
                 raise exc
-
-
-def test_list():
-    lst = ListFiles(root=Path("~/code/linux/").expanduser())
-
-    for args in [
-        ".",
-        ["lib", "include/linux"],
-        ["enoent", "fs"],
-    ]:
-        print(f"LIST paths={args=}")
-        result = lst.call_tool(dict(path=args))
-        print(result)
-        print()
-
-
-def test_read_file():
-    cmd = ReadFiles(root=Path("~/code/linux/").expanduser())
-
-    for args in [
-        ".",
-        "fs/namei.c",
-        ["lib", "enoent", "include/linux/compiler.h"],
-    ]:
-        print(f"READFILES paths={args=}")
-        result = cmd.call_tool(dict(path=args))
-        print(result)
-        print()
-
-
-def test_search():
-    cmd = SearchFiles(root=Path("~/code/linux/").expanduser())
-
-    for args in [
-        SearchFiles.Params(
-            pattern="printk",
-        ),
-        SearchFiles.Params(
-            pattern="no such rhino",
-        ),
-        SearchFiles.Params(
-            pattern="dma_alloc_coherent",
-            path="Documentation",
-            glob=["*.txt"],
-        ),
-    ]:
-        print(f"SEARCH {args=}")
-        result = cmd.call_tool(args.model_dump())
-        print(result)
-        print()
-
-
-def selftest():
-    test_list()
-    test_read_file()
-    test_search()
