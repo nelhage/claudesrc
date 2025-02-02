@@ -12,6 +12,8 @@ DEFAULT_MAX_TOKENS = 1024
 
 
 class ModelOptsObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
     object_type: ClassVar[str] = "model_opts"
 
     model: str
@@ -21,6 +23,8 @@ class ModelOptsObject(BaseModel):
 
 
 class ToolObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
     object_type: ClassVar[str] = "tool"
 
     name: str
@@ -29,7 +33,7 @@ class ToolObject(BaseModel):
 
 
 class ContentDict(TypedDict):
-    __pydantic_config__ = ConfigDict(extra="allow")  # type: ignore
+    __pydantic_config__ = ConfigDict(extra="allow", frozen=True)  # type: ignore
 
     type: Annotated[
         ReadOnly[str],
@@ -47,6 +51,8 @@ cached_adapter = lru_cache(maxsize=16)(TypeAdapter)
 
 
 class ContentObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
     object_type: ClassVar[str] = "content"
 
     type: str
@@ -68,11 +74,15 @@ class ContentObject(BaseModel):
 
 
 class MessageObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
     content: ObjectID
     role: Literal["user", "assistant"]
 
 
 class PromptObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
     object_type: ClassVar[str] = "prompt"
 
     message: MessageObject
@@ -80,6 +90,8 @@ class PromptObject(BaseModel):
 
 
 class CreateMessageObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
     object_type: ClassVar["str"] = "create_message"
 
     model: ObjectID
@@ -90,6 +102,8 @@ class CreateMessageObject(BaseModel):
 
 
 class ResponseObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
     object_type: ClassVar["str"] = "message_response"
     request: ObjectID  # CreateMessageObject
     content: list[ObjectID]  # ContentObject
@@ -99,6 +113,8 @@ class ResponseObject(BaseModel):
 
 
 class ToolUseObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
     object_type: ClassVar["str"] = "tool_use"
 
     id: str
@@ -107,6 +123,8 @@ class ToolUseObject(BaseModel):
 
 
 class ToolResultObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
     object_type: ClassVar["str"] = "tool_result"
 
     tool_use: ObjectID  # ToolUseObject
