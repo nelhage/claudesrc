@@ -86,6 +86,9 @@ class Context:
         finally:
             self.object_cache.pop_frame()
 
+    def hash_object(self, obj: ObjectType) -> ObjectID:
+        return self.store.hash_object(dump_object(obj))
+
     def insert(self, obj: ObjectType) -> ObjectID:
         flat = dump_object(obj)
         id = self.store.hash_object(flat)

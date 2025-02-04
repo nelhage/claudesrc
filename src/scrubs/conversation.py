@@ -58,6 +58,23 @@ def insert_tool(ctx: Context, tool: tool.Tool) -> ObjectID:
     )
 
 
+def get_cached_create(ctx: Context, create: CreateMessageObject) -> ObjectID | None:
+    reply_id = ctx.get_cache(ctx.insert(create))
+    if reply_id is not None:
+        return reply_id
+
+    # backwards-compat: Try looking for the tools on the ModelOpts
+    opts_tools = ctx.get_model_opts(create.model).model_copy(
+        update=dict(tools=create.tools)
+    )
+
+    if ctx.get(ctx.hash_object(opts_tools)) is None:
+        return None
+    create_no_tools = create.model_copy(update=dict(tools=None))
+
+    return ctx.get_cache(ctx.hash_object(create_no_tools))
+
+
 class Conversation:
     def __init__(
         self,
@@ -82,7 +99,6 @@ class Conversation:
             ModelOptsObject(
                 model=model,
                 system=[self.ctx.insert(p) for p in self.system_prompt],
-                tools=[insert_tool(ctx, t) for t in tools],
             )
         )
 
@@ -128,10 +144,15 @@ class Conversation:
         assert self.prompt is not None
 
         create = CreateMessageObject(
-            model=self.model, prompt=self.prompt, seed=seed, max_tokens=self.max_tokens
+            model=self.model,
+            prompt=self.prompt,
+            seed=seed,
+            max_tokens=self.max_tokens,
+            tools=[insert_tool(self.ctx, t) for t in self.tools.values()],
         )
 
-        reply_obj = self.ctx.get_cache(self.ctx.insert(create))
+        reply_obj = get_cached_create(self.ctx, create)
+
         if reply_obj is not None:
             reply = self.ctx.get_response(reply_obj)
         else:
@@ -184,7 +205,6 @@ class Conversation:
         message = cast(ToolUseBlockParam, message)
 
         tool_id = insert_tool(self.ctx, self.tools[message["name"]])
-        assert tool_id in self.ctx.get_model_opts(self.model).tools
 
         tool_use = ToolUseObject(
             tool=tool_id,

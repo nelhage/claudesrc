@@ -2,7 +2,16 @@ from functools import lru_cache
 from typing import Annotated, Any, ClassVar, Literal, Type, TypeVar, cast, get_args
 
 from anthropic.types import Usage
-from pydantic import BaseModel, ConfigDict, Field, GetPydanticSchema, TypeAdapter
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    GetPydanticSchema,
+    SerializationInfo,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    model_serializer,
+)
 from pydantic_core import core_schema
 from typing_extensions import ReadOnly, TypedDict
 
@@ -19,7 +28,7 @@ class ModelOptsObject(BaseModel):
     model: str
     metadata: dict | None = None
     system: list[ObjectID] = Field(default_factory=list)
-    tools: list[ObjectID] = Field(default_factory=list)
+    tools: list[ObjectID] | None = None
 
 
 class ToolObject(BaseModel):
@@ -97,8 +106,17 @@ class CreateMessageObject(BaseModel):
     model: ObjectID
     prompt: ObjectID
 
+    tools: list[ObjectID] | None = Field(default=None)
+
     seed: int = 0
     max_tokens: int = DEFAULT_MAX_TOKENS
+
+    @model_serializer(mode="wrap")
+    def _serializer(self, nxt: SerializerFunctionWrapHandler, info: SerializationInfo):
+        orig = nxt(self)
+        if orig.get("tools") is None:
+            orig.pop("tools")
+        return orig
 
 
 class ResponseObject(BaseModel):
