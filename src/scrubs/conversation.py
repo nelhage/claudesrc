@@ -1,5 +1,7 @@
 from typing import Iterable, Literal, cast
 
+from pydantic import BaseModel
+
 import anthropic
 from anthropic.types import (
     DocumentBlockParam,
@@ -11,9 +13,8 @@ from anthropic.types import (
     ToolResultBlockParam,
     ToolUseBlockParam,
 )
-from pydantic import BaseModel
-
 from scrubs import tool
+from scrubs.llm import LLMInterface
 
 from .context import Context, flatten_prompt
 from .objects import (
@@ -50,44 +51,27 @@ BlockParam = (
 )
 
 
-def to_api_block(ctx: Context, tool_id: ObjectID) -> ToolParam:
-    tool = ctx.get_tool(tool_id)
-    return ToolParam(
-        name=tool.name,
-        description=tool.description,
-        input_schema=tool.input_schema,
-    )
-
-
 class Conversation:
     def __init__(
         self,
         ctx: Context,
-        client: anthropic.Client,
+        model: LLMInterface,
         *,
         seed: int = 0,
-        tools: list[tool.Tool] = [],
-        model: ModelParam = "claude-3-5-sonnet-latest",
+        tools: dict[str, tool.Tool] = {},
         system_prompt: Iterable[str | TextBlockParam] = [],
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
         self.ctx = ctx
-        self.client = client
-        self.system_prompt: tuple[ContentObject, ...] = tuple(
-            ContentObject.from_api(p) for p in system_prompt
-        )
+        self.model = model
         self.seed = seed
         self.max_tokens = max_tokens
 
-        self.model = self.ctx.insert(
-            ModelObject(
-                provider="anthropic",
-                model=model,
-            )
-        )
-
-        self.tools = {t.name: t for t in tools}
+        self.tools = tools
         self.prompt: ObjectID | None = None
+        self.system_prompt: tuple[ObjectID, ...] = tuple(
+            ctx.insert(ContentObject.from_api(p)) for p in system_prompt
+        )
 
     def append_user(self, prompt: str | TextBlockParam):
         self.append_turn(
@@ -129,10 +113,11 @@ class Conversation:
 
         opts = self.ctx.insert(
             CreateMessageOptsObject(
-                model=self.model,
+                model=self.ctx.insert(self.model.model),
                 seed=seed,
                 max_tokens=self.max_tokens,
                 tools=[self.ctx.insert(as_tool_object(t)) for t in self.tools.values()],
+                system=list(self.system_prompt),
             )
         )
 
@@ -152,34 +137,9 @@ class Conversation:
             yield self.append_turn("assistant", content)
 
     def _send_api(self, create: CreateMessageObject) -> ResponseObject:
-        create_id = self.ctx.insert(create)
-        opts = self.ctx.get_create_opts(create.opts)
-        model = self.ctx.get_model(opts.model)
+        response = self.model.create_message(self.ctx, create)
 
-        messages = flatten_prompt(self.ctx, create.prompt)
-
-        reply = self.client.messages.create(
-            messages=messages,
-            model=model.model,
-            system=[p.to_api(TextBlockParam) for p in self.system_prompt],
-            tools=[to_api_block(self.ctx, tool) for tool in opts.tools or ()],
-            max_tokens=opts.max_tokens,
-        )
-
-        content = [
-            self.ctx.insert(ContentObject.from_api(c.model_dump()))
-            for c in reply.content
-        ]
-
-        response = ResponseObject(
-            request=create_id,
-            content=content,
-            id=reply.id,
-            stop_reason=reply.stop_reason,
-            usage=reply.usage,
-        )
-
-        self.ctx.put_cache(create_id, self.ctx.insert(response))
+        self.ctx.put_cache(self.ctx.insert(create), self.ctx.insert(response))
 
         return response
 

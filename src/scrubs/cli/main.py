@@ -11,6 +11,7 @@ import anthropic
 import click
 
 from scrubs import anthropic_api_key, models, prompts
+from scrubs.anthropic import AnthropicModel
 from scrubs.context import Context
 from scrubs.conversation import DEFAULT_MAX_TOKENS, Conversation
 from scrubs.interface import StopConversation, read_user_turn, run_conversation
@@ -128,10 +129,9 @@ def sourcetool(ctx: click.Context, model: str):
 
     conversation = Conversation(
         ctx=state.ctx,
-        client=state.client,
-        model=model,
+        model=AnthropicModel(client=state.client, model=model),
         system_prompt=system,
-        tools=tools,
+        tools={t.name: t for t in tools},
     )
 
     query = """\
@@ -205,12 +205,11 @@ def query(
 
     conversation = Conversation(
         ctx=state.ctx,
-        client=state.client,
-        model=models.SONNET_3_5,
+        model=AnthropicModel(client=state.client, model=model),
         system_prompt=system,
-        seed=seed,
-        tools=tools,
+        tools={t.name: t for t in tools},
         max_tokens=max_tokens,
+        seed=seed,
     )
 
     for f in file:
