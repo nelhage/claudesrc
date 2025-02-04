@@ -5,6 +5,8 @@ from anthropic.types import ToolParam
 from anthropic.types.tool_result_block_param import Content
 from pydantic import BaseModel
 
+from scrubs.objects import ToolObject
+
 
 class Tool(Protocol):
     name: str
@@ -14,7 +16,7 @@ class Tool(Protocol):
     def input_schema(self) -> dict: ...
 
     @abstractmethod
-    def cache_params(self) -> Any: ...
+    def serialize_params(self) -> Any: ...
 
     @abstractmethod
     def call_tool(self, args) -> str | list[Content]: ...
@@ -37,8 +39,7 @@ class PydanticTool(Tool, Generic[ParamsT]):
         return self.Params.model_json_schema()
 
     @abstractmethod
-    def cache_params(self) -> Any:
-        """Return parameters needed to reconstruct this tool instance."""
+    def serialize_params(self) -> Any:
         pass
 
     @abstractmethod
@@ -52,9 +53,10 @@ class PydanticTool(Tool, Generic[ParamsT]):
         return self.call(params)
 
 
-def to_api_block(tool: Tool) -> ToolParam:
-    return ToolParam(
+def as_tool_object(tool: Tool) -> ToolObject:
+    return ToolObject(
         name=tool.name,
         description=tool.description,
         input_schema=tool.input_schema,
+        params=tool.serialize_params(),
     )

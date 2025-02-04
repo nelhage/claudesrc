@@ -37,8 +37,10 @@ class ToolObject(BaseModel):
     object_type: ClassVar[str] = "tool"
 
     name: str
+    description: str
     input_schema: dict = Field(default_factory=dict)
-    cache_params: Any = Field(default_factory=dict)
+
+    params: Any = None
 
 
 class ContentDict(TypedDict):

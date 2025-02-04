@@ -14,7 +14,7 @@ class ListFiles(PydanticTool):
     def __init__(self, root: Path):
         self.root = root
 
-    def cache_params(self) -> dict:
+    def serialize_params(self) -> dict:
         return dict(root=self.root)
 
     class Params(BaseModel):
@@ -64,7 +64,7 @@ class ReadFiles(PydanticTool):
     def __init__(self, root: Path):
         self.root = root
 
-    def cache_params(self) -> dict:
+    def serialize_params(self) -> dict:
         return dict(root=self.root)
 
     class Params(BaseModel):
@@ -101,7 +101,7 @@ class SearchFiles(PydanticTool):
     def __init__(self, root: Path):
         self.root = root
 
-    def cache_params(self) -> dict:
+    def serialize_params(self) -> dict:
         return dict(root=self.root)
 
     class Params(BaseModel):

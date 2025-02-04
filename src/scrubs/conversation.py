@@ -7,6 +7,7 @@ from anthropic.types import (
     MessageParam,
     ModelParam,
     TextBlockParam,
+    ToolParam,
     ToolResultBlockParam,
     ToolUseBlockParam,
 )
@@ -29,7 +30,7 @@ from .objects import (
     ToolUseObject,
 )
 from .store import ObjectID
-from .tool import to_api_block
+from .tool import as_tool_object
 
 RoleType = Literal["user", "assistant"]
 
@@ -48,16 +49,6 @@ BlockParam = (
 )
 
 
-def insert_tool(ctx: Context, tool: tool.Tool) -> ObjectID:
-    return ctx.insert(
-        ToolObject(
-            name=tool.name,
-            cache_params=tool.cache_params(),
-            input_schema=tool.input_schema,
-        )
-    )
-
-
 def get_cached_create(ctx: Context, create: CreateMessageObject) -> ObjectID | None:
     reply_id = ctx.get_cache(ctx.insert(create))
     if reply_id is not None:
@@ -73,6 +64,15 @@ def get_cached_create(ctx: Context, create: CreateMessageObject) -> ObjectID | N
     create_no_tools = create.model_copy(update=dict(tools=None))
 
     return ctx.get_cache(ctx.hash_object(create_no_tools))
+
+
+def to_api_block(ctx: Context, tool_id: ObjectID) -> ToolParam:
+    tool = ctx.get_tool(tool_id)
+    return ToolParam(
+        name=tool.name,
+        description=tool.description,
+        input_schema=tool.input_schema,
+    )
 
 
 class Conversation:
@@ -148,7 +148,7 @@ class Conversation:
             prompt=self.prompt,
             seed=seed,
             max_tokens=self.max_tokens,
-            tools=[insert_tool(self.ctx, t) for t in self.tools.values()],
+            tools=[self.ctx.insert(as_tool_object(t)) for t in self.tools.values()],
         )
 
         reply_obj = get_cached_create(self.ctx, create)
@@ -171,7 +171,7 @@ class Conversation:
             messages=messages,
             model=model.model,
             system=[p.to_api(TextBlockParam) for p in self.system_prompt],
-            tools=[to_api_block(tool) for tool in self.tools.values()],
+            tools=[to_api_block(self.ctx, tool) for tool in create.tools or ()],
             max_tokens=create.max_tokens,
         )
 
@@ -204,7 +204,7 @@ class Conversation:
 
         message = cast(ToolUseBlockParam, message)
 
-        tool_id = insert_tool(self.ctx, self.tools[message["name"]])
+        tool_id = self.ctx.insert(as_tool_object(self.tools[message["name"]]))
 
         tool_use = ToolUseObject(
             tool=tool_id,

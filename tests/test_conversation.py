@@ -18,7 +18,7 @@ def test_tools_migration_cache_compat():
     ctx = Context(store)
 
     # Create some test objects
-    tool = ToolObject(name="test_tool")
+    tool = ToolObject(name="test_tool", description="does stuff", input_schema={})
     tool_id = ctx.insert(tool)
 
     # Create old-style ModelOpts with tools
