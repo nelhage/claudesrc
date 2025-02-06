@@ -17,12 +17,12 @@ from scrubs import tool
 
 from .context import Context, flatten_prompt
 from .objects import (
-    DEFAULT_MAX_TOKENS,
     ContentDict,
     ContentObject,
     CreateMessageObject,
+    CreateMessageOptsObject,
     MessageObject,
-    ModelOptsObject,
+    ModelObject,
     PromptObject,
     ResponseObject,
     ToolObject,
@@ -33,6 +33,7 @@ from .store import ObjectID
 from .tool import as_tool_object
 
 RoleType = Literal["user", "assistant"]
+DEFAULT_MAX_TOKENS = 1024
 
 
 class MessageTurn(BaseModel):
@@ -47,23 +48,6 @@ BlockParam = (
     | ToolResultBlockParam
     | DocumentBlockParam
 )
-
-
-def get_cached_create(ctx: Context, create: CreateMessageObject) -> ObjectID | None:
-    reply_id = ctx.get_cache(ctx.insert(create))
-    if reply_id is not None:
-        return reply_id
-
-    # backwards-compat: Try looking for the tools on the ModelOpts
-    opts_tools = ctx.get_model_opts(create.model).model_copy(
-        update=dict(tools=create.tools)
-    )
-
-    if ctx.get(ctx.hash_object(opts_tools)) is None:
-        return None
-    create_no_tools = create.model_copy(update=dict(tools=None))
-
-    return ctx.get_cache(ctx.hash_object(create_no_tools))
 
 
 def to_api_block(ctx: Context, tool_id: ObjectID) -> ToolParam:
@@ -96,9 +80,9 @@ class Conversation:
         self.max_tokens = max_tokens
 
         self.model = self.ctx.insert(
-            ModelOptsObject(
+            ModelObject(
+                provider="anthropic",
                 model=model,
-                system=[self.ctx.insert(p) for p in self.system_prompt],
             )
         )
 
@@ -143,15 +127,21 @@ class Conversation:
     def _send_user(self, seed: int) -> Iterable[MessageTurn]:
         assert self.prompt is not None
 
-        create = CreateMessageObject(
-            model=self.model,
-            prompt=self.prompt,
-            seed=seed,
-            max_tokens=self.max_tokens,
-            tools=[self.ctx.insert(as_tool_object(t)) for t in self.tools.values()],
+        opts = self.ctx.insert(
+            CreateMessageOptsObject(
+                model=self.model,
+                seed=seed,
+                max_tokens=self.max_tokens,
+                tools=[self.ctx.insert(as_tool_object(t)) for t in self.tools.values()],
+            )
         )
 
-        reply_obj = get_cached_create(self.ctx, create)
+        create = CreateMessageObject(
+            opts=opts,
+            prompt=self.prompt,
+        )
+
+        reply_obj = self.ctx.get_cache(self.ctx.insert(create))
 
         if reply_obj is not None:
             reply = self.ctx.get_response(reply_obj)
@@ -163,7 +153,8 @@ class Conversation:
 
     def _send_api(self, create: CreateMessageObject) -> ResponseObject:
         create_id = self.ctx.insert(create)
-        model = self.ctx.get_model_opts(create.model)
+        opts = self.ctx.get_create_opts(create.opts)
+        model = self.ctx.get_model(opts.model)
 
         messages = flatten_prompt(self.ctx, create.prompt)
 
@@ -171,8 +162,8 @@ class Conversation:
             messages=messages,
             model=model.model,
             system=[p.to_api(TextBlockParam) for p in self.system_prompt],
-            tools=[to_api_block(self.ctx, tool) for tool in create.tools or ()],
-            max_tokens=create.max_tokens,
+            tools=[to_api_block(self.ctx, tool) for tool in opts.tools or ()],
+            max_tokens=opts.max_tokens,
         )
 
         content = [

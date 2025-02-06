@@ -6,8 +6,10 @@ from anthropic.types import MessageParam
 from .objects import (
     OBJECT_TYPES,
     ContentObject,
+    CreateMessageObject,
+    CreateMessageOptsObject,
     MessageObject,
-    ModelOptsObject,
+    ModelObject,
     ObjectType,
     PromptObject,
     ResponseObject,
@@ -21,7 +23,7 @@ Obj = TypeVar("Obj", bound=ObjectType)
 
 
 def dump_object(obj: ObjectType) -> str:
-    return obj.model_dump_json()
+    return obj.model_dump_json(exclude_none=True)
 
 
 class DictStack:
@@ -117,8 +119,8 @@ class Context:
         got = self.store.fetch(id, ty.object_type)
         return ty.model_validate_json(got.object)
 
-    def get_model_opts(self, id: ObjectID) -> ModelOptsObject:
-        return self.get_type(id, ModelOptsObject)
+    def get_model(self, id: ObjectID) -> ModelObject:
+        return self.get_type(id, ModelObject)
 
     def get_tool(self, id: ObjectID) -> ToolObject:
         return self.get_type(id, ToolObject)
@@ -128,6 +130,12 @@ class Context:
 
     def get_prompt(self, id: ObjectID) -> PromptObject:
         return self.get_type(id, PromptObject)
+
+    def get_create_opts(self, id: ObjectID) -> CreateMessageOptsObject:
+        return self.get_type(id, CreateMessageOptsObject)
+
+    def get_create(self, id: ObjectID) -> CreateMessageObject:
+        return self.get_type(id, CreateMessageObject)
 
     def get_response(self, id: ObjectID) -> ResponseObject:
         return self.get_type(id, ResponseObject)

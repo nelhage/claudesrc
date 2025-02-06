@@ -17,18 +17,14 @@ from typing_extensions import ReadOnly, TypedDict
 
 from scrubs.store import ObjectID
 
-DEFAULT_MAX_TOKENS = 1024
 
-
-class ModelOptsObject(BaseModel):
+class ModelObject(BaseModel):
     __pydantic_config__ = ConfigDict(frozen=True)
 
-    object_type: ClassVar[str] = "model_opts"
+    object_type: ClassVar[str] = "model_ref"
 
+    provider: str
     model: str
-    metadata: dict | None = None
-    system: list[ObjectID] = Field(default_factory=list)
-    tools: list[ObjectID] | None = None
 
 
 class ToolObject(BaseModel):
@@ -100,25 +96,27 @@ class PromptObject(BaseModel):
     prefix: ObjectID | None = None
 
 
+class CreateMessageOptsObject(BaseModel):
+    __pydantic_config__ = ConfigDict(frozen=True)
+
+    object_type: ClassVar["str"] = "create_message_opts"
+
+    model: ObjectID  # ModelRefObject
+
+    max_tokens: int
+
+    tools: list[ObjectID] = Field(default_factory=list)
+    seed: int = 0
+    system: list[ObjectID] = Field(default_factory=list)
+
+
 class CreateMessageObject(BaseModel):
     __pydantic_config__ = ConfigDict(frozen=True)
 
     object_type: ClassVar["str"] = "create_message"
 
-    model: ObjectID
-    prompt: ObjectID
-
-    tools: list[ObjectID] | None = Field(default=None)
-
-    seed: int = 0
-    max_tokens: int = DEFAULT_MAX_TOKENS
-
-    @model_serializer(mode="wrap")
-    def _serializer(self, nxt: SerializerFunctionWrapHandler, info: SerializationInfo):
-        orig = nxt(self)
-        if orig.get("tools") is None:
-            orig.pop("tools")
-        return orig
+    opts: ObjectID  # CreateMessageOptsObject
+    prompt: ObjectID  # PromptObject
 
 
 class ResponseObject(BaseModel):
@@ -152,10 +150,11 @@ class ToolResultObject(BaseModel):
 
 
 ObjectType = (
-    ModelOptsObject
+    ModelObject
     | ToolObject
     | ContentObject
     | PromptObject
+    | CreateMessageOptsObject
     | CreateMessageObject
     | ResponseObject
     | ToolUseObject
