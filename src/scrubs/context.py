@@ -1,3 +1,4 @@
+from collections import ChainMap
 from contextlib import contextmanager
 from typing import Type, TypeVar
 
@@ -26,67 +27,18 @@ def dump_object(obj: ObjectType) -> str:
     return obj.model_dump_json(exclude_none=True)
 
 
-class DictStack:
-    def __init__(self):
-        """Initialize an empty stack with one frame."""
-        self.frames = [{}]
-
-    def get(self, key):
-        """
-        Search for key from top to bottom of the stack.
-        Returns the first value found or None if not found.
-        """
-        for frame in reversed(self.frames):
-            if key in frame:
-                return frame[key]
-        return None
-
-    def __contains__(self, key):
-        """
-        Implement the 'in' operator to check if a key exists in any frame.
-        Returns True if the key exists, False otherwise.
-        """
-        return self.get(key) is not None
-
-    def set(self, key, value):
-        """
-        Set key-value pair in the topmost frame.
-        Raises ValueError if key exists anywhere in the stack.
-        """
-        if self.get(key) is not None:
-            raise ValueError(f"Key '{key}' already exists in the stack")
-        self.frames[-1][key] = value
-
-    def push_frame(self):
-        """Add a new empty dictionary frame to the top of the stack."""
-        self.frames.append({})
-
-    def pop_frame(self):
-        """
-        Remove and return the topmost frame.
-        Raises IndexError if attempting to pop the last frame.
-        """
-        if len(self.frames) <= 1:
-            raise IndexError("Cannot pop the last frame")
-        return self.frames.pop()
-
-    def __str__(self):
-        """Return a string representation of the stack."""
-        return "\n".join(f"Frame {i}: {frame}" for i, frame in enumerate(self.frames))
-
-
 class Context:
     def __init__(self, store: Store):
         self.store = store
-        self.object_cache = DictStack()
+        self.object_cache = ChainMap()
 
     @contextmanager
     def cache_scope(self):
         try:
-            self.object_cache.push_frame()
+            self.object_cache = self.object_cache.new_child()
             yield
         finally:
-            self.object_cache.pop_frame()
+            self.object_cache = self.object_cache.parents
 
     def hash_object(self, obj: ObjectType) -> ObjectID:
         return self.store.hash_object(dump_object(obj))
@@ -97,7 +49,7 @@ class Context:
         if id in self.object_cache:
             return id
         id = self.store.insert(obj.object_type, flat)
-        self.object_cache.set(id, obj)
+        self.object_cache[id] = obj
         return id
 
     def get(self, id: ObjectID) -> ObjectType | None:
@@ -108,7 +60,7 @@ class Context:
         if raw is None:
             return None
         inmem = OBJECT_TYPES[raw.type].model_validate_json(raw.object)
-        self.object_cache.set(id, inmem)
+        self.object_cache[id] = inmem
         return inmem
 
     def get_type(self, id: ObjectID, ty: Type[Obj]) -> Obj:
