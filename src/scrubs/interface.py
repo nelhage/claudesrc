@@ -43,7 +43,7 @@ def format_text(role, text) -> str:
 
 
 def render_content(ctx: Context, fh, role: str, content_id: ObjectID):
-    content = ctx.get_content(content_id)
+    content = ctx.content(content_id)
     content_dict = content.to_dict()
 
     match content_dict["type"]:
@@ -52,15 +52,15 @@ def render_content(ctx: Context, fh, role: str, content_id: ObjectID):
             print(format_text(role, text), file=fh)
             print(file=fh)
         case "tool_use":
-            tool_use = ctx.get_tool_use(content_id)
-            tool = ctx.get_tool(tool_use.tool)
+            tool_use = ctx.tool_use(content_id)
+            tool = ctx.tool(tool_use.tool)
             print(f"# tool_use tool={tool.name}: {tool_use.input}", file=fh)
             print(file=fh)
         case "tool_result":
-            tool_result = ctx.get_tool_result(content_id)
+            tool_result = ctx.tool_result(content_id)
             nlines = 0
             for resp_id in tool_result.response:
-                resp = ctx.get_content(resp_id)
+                resp = ctx.content(resp_id)
                 if resp.type == "text":
                     nlines += resp.fields.get("text", "").count("\n")
 

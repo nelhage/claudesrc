@@ -119,31 +119,31 @@ class Context:
         got = self.store.fetch(id, ty.object_type)
         return ty.model_validate_json(got.object)
 
-    def get_model(self, id: ObjectID) -> ModelObject:
+    def model(self, id: ObjectID) -> ModelObject:
         return self.get_type(id, ModelObject)
 
-    def get_tool(self, id: ObjectID) -> ToolObject:
+    def tool(self, id: ObjectID) -> ToolObject:
         return self.get_type(id, ToolObject)
 
-    def get_content(self, id: ObjectID) -> ContentObject:
+    def content(self, id: ObjectID) -> ContentObject:
         return self.get_type(id, ContentObject)
 
-    def get_prompt(self, id: ObjectID) -> PromptObject:
+    def prompt(self, id: ObjectID) -> PromptObject:
         return self.get_type(id, PromptObject)
 
-    def get_create_opts(self, id: ObjectID) -> CreateMessageOptsObject:
+    def create_opts(self, id: ObjectID) -> CreateMessageOptsObject:
         return self.get_type(id, CreateMessageOptsObject)
 
-    def get_create(self, id: ObjectID) -> CreateMessageObject:
+    def create(self, id: ObjectID) -> CreateMessageObject:
         return self.get_type(id, CreateMessageObject)
 
-    def get_response(self, id: ObjectID) -> ResponseObject:
+    def response(self, id: ObjectID) -> ResponseObject:
         return self.get_type(id, ResponseObject)
 
-    def get_tool_use(self, id: ObjectID) -> ToolUseObject:
+    def tool_use(self, id: ObjectID) -> ToolUseObject:
         return self.get_type(id, ToolUseObject)
 
-    def get_tool_result(self, id: ObjectID) -> ToolResultObject:
+    def tool_result(self, id: ObjectID) -> ToolResultObject:
         return self.get_type(id, ToolResultObject)
 
     # API Cache
@@ -161,7 +161,7 @@ def walk_prompt_chain(ctx: Context, prompt_id: ObjectID | None) -> list[MessageO
     current = prompt_id
 
     while current is not None:
-        prompt = ctx.get_prompt(current)
+        prompt = ctx.prompt(current)
         messages.append(prompt.message)
         current = prompt.prefix
 
@@ -183,11 +183,11 @@ def flatten_prompt(ctx: Context, prompt: ObjectID | None) -> list[MessageParam]:
 
     # Build list in reverse order (most recent first)
     while current_prompt is not None:
-        prompt_obj = ctx.get_prompt(current_prompt)
+        prompt_obj = ctx.prompt(current_prompt)
 
         # Get content for current message
         message = prompt_obj.message
-        content_obj = ctx.get_content(message.content)
+        content_obj = ctx.content(message.content)
         content = content_obj.to_dict()
 
         # Add message to list

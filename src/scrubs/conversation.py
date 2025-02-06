@@ -87,7 +87,7 @@ class Conversation:
             )
         )
 
-        block = self.ctx.get_content(content).to_dict()
+        block = self.ctx.content(content).to_dict()
         return MessageTurn(role=role, content=block)
 
     def pump(self, seed: int | None = None) -> Iterable[MessageTurn]:
@@ -98,7 +98,7 @@ class Conversation:
             return
 
         while True:
-            last = self.ctx.get_prompt(self.prompt).message
+            last = self.ctx.prompt(self.prompt).message
 
             if last.role == "user":
                 yield from self._send_user(seed)
@@ -129,7 +129,7 @@ class Conversation:
         reply_obj = self.ctx.get_cache(self.ctx.insert(create))
 
         if reply_obj is not None:
-            reply = self.ctx.get_response(reply_obj)
+            reply = self.ctx.response(reply_obj)
         else:
             reply = self._send_api(create)
 
@@ -147,8 +147,8 @@ class Conversation:
         if self.prompt is None:
             return None
 
-        last = self.ctx.get_prompt(self.prompt).message
-        message = self.ctx.get_content(last.content).to_dict()
+        last = self.ctx.prompt(self.prompt).message
+        message = self.ctx.content(last.content).to_dict()
 
         if message["type"] != "tool_use":
             return None
@@ -167,9 +167,9 @@ class Conversation:
 
         result = self.ctx.get_cache(tool_use_oid)
         if result is not None:
-            result = self.ctx.get_tool_result(result)
+            result = self.ctx.tool_result(result)
         else:
-            tool = self.tools[self.ctx.get_tool(tool_use.tool).name]
+            tool = self.tools[self.ctx.tool(tool_use.tool).name]
             result_content = tool.call_tool(tool_use.input)
             if not isinstance(result_content, list):
                 result_content = [result_content]
@@ -190,7 +190,7 @@ class Conversation:
                     type="tool_result",
                     tool_use_id=tool_use.id,
                     content=[
-                        self.ctx.get_content(c).to_api(TextBlockParam)
+                        self.ctx.content(c).to_api(TextBlockParam)
                         for c in result.response
                     ],
                     is_error=False,

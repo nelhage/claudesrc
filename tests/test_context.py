@@ -97,7 +97,7 @@ def test_specialized_getters(ctx: Context):
     model_opts = ModelObject(provider="dummy", model="test-model")
     id = ctx.insert(model_opts)
 
-    retrieved = ctx.get_model(id)
+    retrieved = ctx.model(id)
     assert isinstance(retrieved, ModelObject)
     assert retrieved.model == "test-model"
 
