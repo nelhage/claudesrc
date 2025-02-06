@@ -1,11 +1,13 @@
 from pathlib import Path
 
+import pytest
 from scrubs.tools.repo import ListFiles, ReadFiles, SearchFiles
 
 # TODO: actually make assertions
 # TODO: flag as slow/integration
 
 
+@pytest.mark.skip()
 def test_list():
     lst = ListFiles(root=Path("~/code/linux/").expanduser())
 
@@ -20,6 +22,7 @@ def test_list():
         print()
 
 
+@pytest.mark.skip()
 def test_read_file():
     cmd = ReadFiles(root=Path("~/code/linux/").expanduser())
 
@@ -34,6 +37,7 @@ def test_read_file():
         print()
 
 
+@pytest.mark.skip()
 def test_search():
     cmd = SearchFiles(root=Path("~/code/linux/").expanduser())
 
