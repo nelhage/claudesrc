@@ -2,7 +2,6 @@ import sys
 
 import click
 
-from scrubs.objects import PromptObject
 
 from .state import State
 

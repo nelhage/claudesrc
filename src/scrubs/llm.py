@@ -1,14 +1,11 @@
-from abc import abstractmethod
-from typing import Iterable, Protocol
+from typing import Protocol
 
 from .context import Context
 from .objects import (
-    ContentObject,
     CreateMessageObject,
     ModelObject,
     ResponseObject,
 )
-from .tool import Tool
 
 
 class LLMInterface(Protocol):

@@ -5,14 +5,13 @@ from pathlib import Path
 from typing import cast
 
 from anthropic.types import (
-    MessageParam,
     ToolResultBlockParam,
     ToolUseBlockParam,
 )
 
 from scrubs.context import Context, walk_prompt_chain
 from scrubs.conversation import Conversation
-from scrubs.objects import MessageObject, PromptObject, ToolResultObject, ToolUseObject
+from scrubs.objects import MessageObject
 from scrubs.store import ObjectID
 
 USER_SEPARATOR = "# Respond below this line. Delete this header to exit\n"

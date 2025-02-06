@@ -1,4 +1,3 @@
-import html
 import io
 import subprocess
 from functools import partial

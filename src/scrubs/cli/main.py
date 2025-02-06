@@ -2,7 +2,6 @@ import sys
 import tempfile
 import traceback
 from contextlib import contextmanager
-from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from textwrap import dedent
@@ -16,7 +15,6 @@ from scrubs.context import Context
 from scrubs.conversation import DEFAULT_MAX_TOKENS, Conversation
 from scrubs.interface import StopConversation, read_user_turn, run_conversation
 from scrubs.store import Store
-from scrubs.tool import Tool
 from scrubs.tools.repo import ListFiles, ReadFiles, SearchFiles
 
 from . import objects

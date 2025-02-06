@@ -1,7 +1,6 @@
 from abc import abstractmethod
-from typing import Any, ClassVar, Generic, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypeVar
 
-from anthropic.types import ToolParam
 from anthropic.types.tool_result_block_param import Content
 from pydantic import BaseModel
 

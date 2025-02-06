@@ -2,31 +2,25 @@ from typing import Iterable, Literal, cast
 
 from pydantic import BaseModel
 
-import anthropic
 from anthropic.types import (
     DocumentBlockParam,
     ImageBlockParam,
-    MessageParam,
-    ModelParam,
     TextBlockParam,
-    ToolParam,
     ToolResultBlockParam,
     ToolUseBlockParam,
 )
 from scrubs import tool
 from scrubs.llm import LLMInterface
 
-from .context import Context, flatten_prompt
+from .context import Context
 from .objects import (
     ContentDict,
     ContentObject,
     CreateMessageObject,
     CreateMessageOptsObject,
     MessageObject,
-    ModelObject,
     PromptObject,
     ResponseObject,
-    ToolObject,
     ToolResultObject,
     ToolUseObject,
 )

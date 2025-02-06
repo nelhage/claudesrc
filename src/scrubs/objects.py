@@ -7,10 +7,7 @@ from pydantic import (
     ConfigDict,
     Field,
     GetPydanticSchema,
-    SerializationInfo,
-    SerializerFunctionWrapHandler,
     TypeAdapter,
-    model_serializer,
 )
 from pydantic_core import core_schema
 from typing_extensions import ReadOnly, TypedDict

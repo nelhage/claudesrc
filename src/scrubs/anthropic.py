@@ -1,38 +1,23 @@
-from typing import Iterable, Literal, cast
+from typing import cast
 
-from pydantic import BaseModel
 
-import anthropic
 from anthropic import Client
 from anthropic.types import (
-    DocumentBlockParam,
-    ImageBlockParam,
-    MessageParam,
     ModelParam,
     TextBlockParam,
     ToolParam,
-    ToolResultBlockParam,
-    ToolUseBlockParam,
 )
-from scrubs import tool
 from scrubs.llm import LLMInterface
 from scrubs.models import MODEL_ALIASES
 
 from .context import Context, flatten_prompt
 from .objects import (
-    ContentDict,
     ContentObject,
     CreateMessageObject,
-    MessageObject,
     ModelObject,
-    PromptObject,
     ResponseObject,
-    ToolObject,
-    ToolResultObject,
-    ToolUseObject,
 )
 from .store import ObjectID
-from .tool import Tool
 
 
 def tool_to_api(ctx: Context, tool_id: ObjectID) -> ToolParam:
