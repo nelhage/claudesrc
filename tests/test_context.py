@@ -1,6 +1,6 @@
 import pytest
 from scrubs.context import Context
-from scrubs.objects import ContentObject, ModelOptsObject, ToolObject
+from scrubs.objects import ContentObject, ModelObject, ToolObject
 from scrubs.store import ObjectID, Store
 
 
@@ -93,12 +93,12 @@ def test_cache_scope_isolation(ctx: Context):
     assert obj1 is not obj2  # Should be different objects after scope exit
 
 
-def test_specialized_getters(ctx):
-    model_opts = ModelOptsObject(model="test-model")
+def test_specialized_getters(ctx: Context):
+    model_opts = ModelObject(provider="dummy", model="test-model")
     id = ctx.insert(model_opts)
 
-    retrieved = ctx.get_model_opts(id)
-    assert isinstance(retrieved, ModelOptsObject)
+    retrieved = ctx.get_model(id)
+    assert isinstance(retrieved, ModelObject)
     assert retrieved.model == "test-model"
 
 
