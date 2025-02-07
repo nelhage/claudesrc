@@ -2,13 +2,12 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import cast
+from typing import Iterable, TextIO, cast
 
 from anthropic.types import (
     ToolResultBlockParam,
     ToolUseBlockParam,
 )
-
 from scrubs.context import Context, walk_prompt_chain
 from scrubs.conversation import Conversation
 from scrubs.objects import MessageObject
@@ -51,19 +50,20 @@ def render_content(ctx: Context, fh, role: str, content_id: ObjectID):
             print(format_text(role, text), file=fh)
             print(file=fh)
         case "tool_use":
-            tool_use = ctx.tool_use(content_id)
-            tool = ctx.tool(tool_use.tool)
-            print(f"# tool_use tool={tool.name}: {tool_use.input}", file=fh)
+            tool_use = content.to_api(ToolUseBlockParam)
+            name = tool_use["name"]
+            print(f"## tool_use tool={name}: {tool_use['input']}", file=fh)
             print(file=fh)
         case "tool_result":
-            tool_result = ctx.tool_result(content_id)
+            tool_result = content.to_api(ToolResultBlockParam)
             nlines = 0
-            for resp_id in tool_result.response:
-                resp = ctx.content(resp_id)
-                if resp.type == "text":
-                    nlines += resp.fields.get("text", "").count("\n")
+            output = tool_result.get("content", [])
+            assert not isinstance(output, str), f"{type(output)=}"
+            for resp in output:
+                if resp["type"] == "text":
+                    nlines += resp["text"].count("\n")
 
-            print(f"# tool_result lines={nlines}", file=fh)
+            print(f"## tool_result lines={nlines}", file=fh)
             print(file=fh)
         case _:
             raise AssertionError(f"Unknown content type: {content_dict['type']!r}")
@@ -77,15 +77,18 @@ def render_message(ctx: Context, fh, message: MessageObject):
     render_content(ctx, fh, message.role, message.content)
 
 
+def render_prompt(ctx: Context, prompt: ObjectID | None, fh: TextIO):
+    for message in walk_prompt_chain(ctx, prompt):
+        render_message(ctx, fh, message)
+
+
 def read_user_turn(ctx: Context, tmpdir: Path, convo: Conversation) -> str | None:
     md_path = tmpdir / "claude.md"
 
     with md_path.open("w") as fh:
         print("# -*- mode: markdown; mode: visual-line; -*-", file=fh)
 
-        prompt = convo.prompt
-        for message in walk_prompt_chain(ctx, prompt):
-            render_message(ctx, fh, message)
+        render_prompt(ctx, convo.prompt, fh)
 
         print(USER_SEPARATOR, file=fh)
 
