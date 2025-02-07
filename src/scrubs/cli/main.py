@@ -16,6 +16,7 @@ from scrubs.conversation import DEFAULT_MAX_TOKENS, Conversation
 from scrubs.interface import StopConversation, read_user_turn, run_conversation
 from scrubs.store import Store
 from scrubs.tools.repo import ListFiles, ReadFiles, SearchFiles
+from scrubs.tools.write import WriteFileTool
 
 from . import objects
 from .state import State
@@ -159,6 +160,13 @@ What is a Maple tree? Where is the data structure defined?
     help="Include tools for accessing a git repository",
 )
 @click.option(
+    "--write",
+    default=False,
+    type=bool,
+    is_flag=True,
+    help="With --repo, include tools for mutating files",
+)
+@click.option(
     "--file",
     default=[],
     type=str,
@@ -180,6 +188,7 @@ def query(
     ctx: click.Context,
     query: str | None = None,
     repo: str | None = None,
+    write: bool = False,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     model: str = models.SONNET_3_5,
     system: tuple[str, ...] = (),
@@ -198,6 +207,9 @@ def query(
         )
 
         tools = [ListFiles(repopath), ReadFiles(repopath), SearchFiles(repopath)]
+
+        if write:
+            tools.append(WriteFileTool(repopath))
     else:
         tools = []
 
@@ -212,7 +224,13 @@ def query(
 
     for f in file:
         p = Path(f)
-        conversation.append_user(prompts.file_contents(p.name, p.read_text()))
+        name = p.name
+        if repo is not None:
+            try:
+                name = p.relative_to(p)
+            except ValueError:
+                pass
+        conversation.append_user(prompts.file_contents(str(name), p.read_text()))
 
     if query == "-":
         query = sys.stdin.read()
