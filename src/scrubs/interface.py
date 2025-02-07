@@ -10,7 +10,7 @@ from anthropic.types import (
 )
 from scrubs.context import Context, walk_prompt_chain
 from scrubs.conversation import Conversation
-from scrubs.objects import MessageObject
+from scrubs.objects import MessageObject, PromptObject
 from scrubs.store import ObjectID
 
 USER_SEPARATOR = "# Respond below this line. Delete this header to exit\n"
@@ -69,17 +69,17 @@ def render_content(ctx: Context, fh, role: str, content_id: ObjectID):
             raise AssertionError(f"Unknown content type: {content_dict['type']!r}")
 
 
-def render_message(ctx: Context, fh, message: MessageObject):
-    header = f"# {message.role.title()}"
-    print(header, file=fh)
+def render_message(ctx: Context, fh, turn: PromptObject):
+    message = turn.message
+    print(f"# {message.role.title()} id={ctx.insert(turn)[:16]}", file=fh)
     print(file=fh)
 
     render_content(ctx, fh, message.role, message.content)
 
 
 def render_prompt(ctx: Context, prompt: ObjectID | None, fh: TextIO):
-    for message in walk_prompt_chain(ctx, prompt):
-        render_message(ctx, fh, message)
+    for turn in walk_prompt_chain(ctx, prompt):
+        render_message(ctx, fh, turn)
 
 
 def read_user_turn(ctx: Context, tmpdir: Path, convo: Conversation) -> str | None:

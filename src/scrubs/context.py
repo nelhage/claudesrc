@@ -107,17 +107,17 @@ class Context:
         return self.store.get_cache(query)
 
 
-def walk_prompt_chain(ctx: Context, prompt_id: ObjectID | None) -> list[MessageObject]:
+def walk_prompt_chain(ctx: Context, prompt_id: ObjectID | None) -> list[PromptObject]:
     """Walk backwards through the prompt chain"""
-    messages = []
+    chain = []
     current = prompt_id
 
     while current is not None:
         prompt = ctx.prompt(current)
-        messages.append(prompt.message)
+        chain.append(prompt)
         current = prompt.prefix
 
-    return list(reversed(messages))
+    return list(reversed(chain))
 
 
 def flatten_prompt(ctx: Context, prompt: ObjectID | None) -> list[MessageParam]:
