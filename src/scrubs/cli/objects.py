@@ -3,6 +3,8 @@ import sys
 import click
 
 from scrubs.context import Context
+from scrubs.interface import render_prompt
+from scrubs.objects import PromptObject
 from scrubs.store import ObjectID
 
 from .state import State
@@ -50,9 +52,14 @@ def show(ctx: click.Context, object: str):
     state = ctx.find_object(State)
     assert state is not None
 
-    raw = state.ctx.store.get(resolve_object(state.ctx, object))
+    oid = resolve_object(state.ctx, object)
+    raw = state.ctx.get(oid)
     if raw is None:
         sys.exit(1)
+
+    if isinstance(raw, PromptObject):
+        render_prompt(state.ctx, oid, sys.stdout)
+        return
 
     # TODO fill me in, format result
     print(raw)
