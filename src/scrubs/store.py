@@ -101,6 +101,19 @@ class Store:
     def object_count(self) -> int:
         return self.db.execute("SELECT COUNT(*) FROM objects").fetchone()[0]
 
+    def resolve_id(self, pfx: str) -> ObjectID:
+        cur = self.db.execute("SELECT id FROM objects WHERE id LIKE ? || '%'", (pfx,))
+        matches = cur.fetchall()
+
+        if len(matches) == 0:
+            raise KeyError(f"No object found with prefix: {pfx}")
+        if len(matches) > 1:
+            raise ValueError(
+                f"Ambiguous prefix {pfx} matches multiple objects: {', '.join(row[0] for row in matches)}"
+            )
+
+        return matches[0][0]
+
     # Cache: (operation, result)
     def put_cache(self, operation: ObjectID, result: ObjectID):
         self.db.execute(
